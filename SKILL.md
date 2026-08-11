@@ -1,6 +1,6 @@
 ---
 name: external-signup
-description: Use when an external site (blog, partner landing page, marketing microsite) wants to host its own first-touch signup form (first name, last name, company, email) and hand the visitor off to EPD to finish account creation with email OTP + password. Covers the public /auth/external-signup/initiate endpoint, the prefill redirect hand-off, ready-to-paste HTML and React templates, and error handling. The backend base URL is fixed at https://api-dev.dev1.epd.com — never ask the user for it and never set up env files.
+description: Use when an external site (blog, partner landing page, marketing microsite) wants to host its own first-touch signup form (first name, last name, company, email) and hand the visitor off to EPD to finish account creation with email OTP + password. Covers the public POST /v1/external-signup endpoint, the prefill redirect hand-off, ready-to-paste HTML and React templates, and error handling. The backend base URL is fixed at https://api-dev.dev1.epd.com — never ask the user for it and never set up env files.
 ---
 
 # EPD External Signup (external first-touch → EPD finish)
@@ -12,8 +12,28 @@ lead lands as an EPD **sandbox/demo account** via EPD's normal signup path; acco
 unchanged.
 
 **Use this when:** you want a signup form living on *your* domain (not an embed/iframe of EPD).
-**Don't use this for:** existing merchant API calls — those are the API-key-gated `/v1/*` surface.
-This endpoint is deliberately **anonymous** because a not-yet-existing merchant has no API key.
+**Don't use this for:** existing merchant API calls — those go through the API-key-gated endpoints
+under `/v1/*` (e.g. `/v1/customers`, `/v1/orders`). This specific `/v1/*` endpoint is the one
+deliberate exception: it's **anonymous, no API key**, because a not-yet-existing merchant has no key
+to send — the whole point of calling it is to create that merchant.
+
+---
+
+## Before generating anything: ask about `partnerKey`
+
+`partnerKey` is **optional** on the API — most integrations don't have one. Before writing any
+code, ask the person you're building this for:
+
+> "Do you have a partner/referral key for this integration?"
+
+- **No / not sure →** omit `partnerKey` entirely. Don't include it anywhere in what you generate.
+  This is the default.
+- **Yes →** hardcode their value directly into the request payload in the JS/route-handler code
+  (see "Adding `partnerKey`" below). It is **never** a form field or input element — the visitor
+  must not see it, type it, or be able to inspect/change it in the rendered page.
+
+Don't ask about this more than once per session. `partnerKey` is plumbing (referral attribution)
+baked in by you, the integrator — it is never visitor-facing.
 
 ---
 
@@ -39,25 +59,28 @@ Your page                          EPD backend                       EPD /auth p
 ─────────                          ───────────                       ──────────────
 [first/last/company/email]
         │  Next ▶
-        │  POST /auth/external-signup/initiate
+        │  POST /v1/external-signup
         └──────────────────────────▶
                                    • validates the 4 fields
                                    • if email already has an EPD
                                      account → returns login URL
                                      (no OTP)
-                                   • else → sends 6-digit email OTP
-                                     + returns a redirect URL with
-                                     the fields as prefill params
+                                   • else → sends 6-digit email OTP,
+                                     saves the lead server-side, and
+                                     returns a redirect URL carrying
+                                     just the email
         ◀──────────────────────────┘
         │  { alreadyRegistered, redirectUrl }
         │
         │  redirect the browser to redirectUrl
         └───────────────────────────────────────────────────────────▶
-                                                                     • reads prefill params
+                                                                     • reads email from the URL
                                                                      • jumps to OTP step, email shown
-                                                                     • user enters OTP
-                                                                     • password form appears with
-                                                                       name/company PRE-FILLED (editable)
+                                                                     • fetches name/company from
+                                                                       GET .../external-signup/prefill
+                                                                       to pre-fill the password step
+                                                                     • user enters OTP + sets a password
+                                                                       (name/company editable, pre-filled)
                                                                      • Create account → sandbox account,
                                                                        logged in
 ```
@@ -65,19 +88,19 @@ Your page                          EPD backend                       EPD /auth p
 Your only job is: render a form, `POST` to `initiate`, and send the browser to the returned
 `redirectUrl`. EPD's `/auth` page handles the OTP → password → account-creation chain.
 
-**Why no signed token?** The prefill fields only pre-fill *editable* form fields; the real gate on
-account creation is the **email OTP + the password** the user sets on EPD. So there's nothing secret
-to protect — the fields ride on the URL as plain params, and one endpoint is all it takes.
+**Why no signed token?** The redirect URL only carries the email; the real gate on account creation
+is the **email OTP + the password** the user sets on EPD. So there's nothing secret to protect — the
+one param that does ride the URL is plain, and one endpoint is all it takes.
 
 ---
 
 ## API contract
 
-Base URL: `https://api-dev.dev1.epd.com`. The endpoint is `@Public()` (no auth header).
+Base URL: `https://api-dev.dev1.epd.com`. The endpoint is `@Public()` (no auth header, no API key).
 
-### `POST /auth/external-signup/initiate`
+### `POST /v1/external-signup`
 
-Rate limited to **5 requests per hour per IP**. Exceeding it returns **429**.
+Rate limited to **60 requests per hour per IP**. Exceeding it returns **429**.
 
 **Request body** (JSON):
 
@@ -87,23 +110,31 @@ Rate limited to **5 requests per hour per IP**. Exceeding it returns **429**.
 | `firstName`   | 2–20 chars; letters, spaces, periods, hyphens, apostrophes only; no HTML               |
 | `lastName`    | 2–20 chars; same character set as `firstName`; no HTML                                  |
 | `companyName` | 3–150 chars; no HTML                                                                    |
+| `partnerKey`  | **optional**; string, ≤100 chars; no HTML — only include if the caller has one (see below) |
 
 (Name/company rules mirror EPD's own signup form exactly, so a value accepted here also passes the
 final account-creation step — no surprise rejection later.)
 
-**Response `200`** — new lead:
+`partnerKey` is pure pass-through attribution — EPD has no partner concept of its own. If sent, it's
+saved server-side immediately (along with email/name/company) when `initiate` succeeds, so the
+referring partner is credited even if the visitor never finishes OTP + password. It does **not** ride
+on the `redirectUrl` — that stays clean — and it never changes the OTP step, the gating logic, or
+which `redirectUrl` branch is returned. Omitting it is completely safe and is the common case.
+
+**Response `201`** — new lead:
 
 ```json
 {
   "alreadyRegistered": false,
-  "redirectUrl": "https://app.epd.example/auth?externalSignup=1&email=ada%40example.com&firstName=Ada&lastName=Lovelace&companyName=Analytical+Engines"
+  "redirectUrl": "https://app.epd.example/auth?externalSignup=1&email=ada%40example.com"
 }
 ```
 
-An OTP email is sent to the address. Redirect the browser to `redirectUrl`. (EPD's `/auth` page reads
-the params, jumps to the OTP step, and strips the params from the URL immediately.)
+`email` is the only field on the URL — `firstName`/`lastName`/`companyName`/`partnerKey` are saved
+server-side (see above), not round-tripped through the query string. An OTP email is sent to the
+address. Redirect the browser to `redirectUrl`.
 
-**Response `200`** — email already has an EPD account:
+**Response `201`** — email already has an EPD account:
 
 ```json
 {
@@ -122,7 +153,7 @@ pre-filled. You may also show your own "You already have an account — log in" 
 { "success": false, "field_errors": [{ "field": "firstName", "messages": ["First name must be at least 2 characters."] }] }
 ```
 
-**Response `429`** — rate limit exceeded (more than 5 initiations in an hour from that IP).
+**Response `429`** — rate limit exceeded (more than 60 initiations in an hour from that IP).
 
 > The `redirectUrl` is absolute and points at EPD's own frontend. Don't build it yourself — always use
 > the value returned, so it stays correct across environments.
@@ -136,10 +167,10 @@ EPD's CORS reflects any origin (`Access-Control-Allow-Origin` echoes the caller)
 
 - **Server-side (recommended).** Call `initiate` from *your* backend and return `redirectUrl` to your
   page. This keeps the request behind your own rate limiting, hides the traffic from the client, and
-  lets you add your own bot/spam checks. The 5/hr limit is per **IP** — from your server that's your
+  lets you add your own bot/spam checks. The 60/hr limit is per **IP** — from your server that's your
   server's IP, so add your own per-visitor throttle if you go this route.
 - **Client-side (simplest).** `fetch` directly from the browser. Fine for low-volume marketing pages.
-  The 5/hr limit is then per visitor IP, which is usually what you want.
+  The 60/hr limit is then per visitor IP, which is usually what you want.
 
 ---
 
@@ -174,7 +205,7 @@ nothing to configure.
     const body = Object.fromEntries(new FormData(form).entries());
 
     try {
-      const res = await fetch(`${EPD_API_BASE}/auth/external-signup/initiate`, {
+      const res = await fetch(`${EPD_API_BASE}/v1/external-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -225,7 +256,7 @@ export function EpdSignupForm() {
     const body = Object.fromEntries(form.entries());
 
     try {
-      const res = await fetch(`${EPD_API_BASE}/auth/external-signup/initiate`, {
+      const res = await fetch(`${EPD_API_BASE}/v1/external-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -279,7 +310,7 @@ const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  const res = await fetch(`${EPD_API_BASE}/auth/external-signup/initiate`, {
+  const res = await fetch(`${EPD_API_BASE}/v1/external-signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -290,6 +321,47 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data, { status: res.status });
 }
 ```
+
+### Adding `partnerKey` (only if the caller confirmed they have one)
+
+None of the templates above include it by default. If the person you asked said yes, hardcode their
+value directly into the request payload in code — **never** as a form input, hidden or otherwise.
+The rendered page must not contain a `partnerKey` field of any kind for the visitor to see, inspect,
+or fill in.
+
+- **HTML/vanilla JS (Template 1)** — set it on the `body` object after
+  `Object.fromEntries(...)`, before `JSON.stringify`:
+  ```js
+  const body = Object.fromEntries(new FormData(form).entries());
+  body.partnerKey = '<their-key>'; // hardcoded here — not a form field
+  ```
+- **React/Next.js (Template 2)** — same pattern, right after building `body` from `FormData`:
+  ```tsx
+  const body = Object.fromEntries(form.entries());
+  body.partnerKey = '<their-key>'; // hardcoded here — not a form field
+  ```
+- **Server-side route handler (Template 3)** — the strongest option when `partnerKey` is in play:
+  inject it server-side before forwarding, so it never reaches the browser at all (not even in
+  client-side JS source, unlike Templates 1/2):
+  ```ts
+  export async function POST(req: NextRequest) {
+    const body = await req.json();
+    body.partnerKey = '<their-key>'; // hardcoded here — the client never sends or sees it
+
+    const res = await fetch(`${EPD_API_BASE}/v1/external-signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    // ...rest unchanged
+  }
+  ```
+  Prefer this route when the caller has a `partnerKey` — Templates 1/2 satisfy "not a form field",
+  but the value is still readable in the page's JS source by anyone who inspects it; Template 3 keeps
+  it out of the browser entirely.
+
+If they said no, leave every template exactly as shown — don't add `partnerKey` anywhere, hardcoded
+or otherwise.
 
 ---
 
@@ -310,9 +382,9 @@ Both success branches do the same thing: **redirect to `redirectUrl`**. You only
 
 ## Notes & guarantees
 
-- **The prefill only pre-fills form fields.** Account creation is still gated by the email OTP and the
-  password the user sets on EPD — tampering with a prefill param can't create an account.
-- **Fields stay editable** on EPD's password step; prefill is a convenience, not a lock.
-- **Prefill params don't linger.** EPD's `/auth` page strips them from the URL as soon as it reads
-  them, so they don't stick in browser history or leak via referrer on subsequent navigations.
-- **No API key, no `/v1/*`.** This endpoint intentionally lives under `/auth` and is anonymous.
+- **The lead is captured immediately.** EPD stores the email/name/company (and `partnerKey`, if sent)
+  as soon as `initiate` succeeds — even if the visitor never returns to finish the OTP + password
+  step, the lead already exists on EPD's side. That's also why the redirect URL doesn't need to carry
+  those fields — only `email` does.
+- **Account creation is still gated by the email OTP and the password** the user sets on EPD, not by
+  anything in the redirect URL — there's nothing there to tamper with that could create an account.
