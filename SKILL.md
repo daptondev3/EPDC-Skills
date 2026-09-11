@@ -251,7 +251,17 @@ nothing to configure.
     const btn = form.querySelector('button');
     btn.disabled = true;
 
-    const body = Object.fromEntries(new FormData(form).entries());
+    // Build the body from named fields only — never spread the whole FormData. If this page's
+    // form has its own hidden inputs (e.g. name="utm_campaign" for the site's own analytics),
+    // spreading would leak those raw snake_case keys into the JSON body alongside our computed
+    // camelCase ones, and the API rejects any property it doesn't recognize (whitelist + 400).
+    const formData = new FormData(form);
+    const body = {
+      firstName: formData.get('firstName'),
+      lastName: formData.get('lastName'),
+      companyName: formData.get('companyName'),
+      email: formData.get('email'),
+    };
     // UTM attribution: whatever the visitor's own URL carries wins. Only utm_source/utm_medium
     // fall back to this skill's defaults when the URL doesn't have them; utm_campaign/utm_term/
     // utm_content are only included when present on the URL. Read-only — never written back to
@@ -316,8 +326,17 @@ export function EpdSignupForm() {
     setError('');
     setSubmitting(true);
 
-    const form = new FormData(e.currentTarget);
-    const body = Object.fromEntries(form.entries());
+    // Build the body from named fields only — never spread the whole FormData. If this page's
+    // form has its own hidden inputs (e.g. name="utm_campaign" for the site's own analytics),
+    // spreading would leak those raw snake_case keys into the JSON body alongside our computed
+    // camelCase ones, and the API rejects any property it doesn't recognize (whitelist + 400).
+    const formData = new FormData(e.currentTarget);
+    const body: Record<string, FormDataEntryValue | null> = {
+      firstName: formData.get('firstName'),
+      lastName: formData.get('lastName'),
+      companyName: formData.get('companyName'),
+      email: formData.get('email'),
+    };
     // UTM attribution: whatever the visitor's own URL carries wins. Only utm_source/utm_medium
     // fall back to this skill's defaults when the URL doesn't have them; utm_campaign/utm_term/
     // utm_content are only included when present on the URL. Read-only — never written back to
@@ -416,7 +435,17 @@ The page that calls it (client-side) does the URL read, same as Templates 1/2:
 'use client';
 
 async function submitToEpd(form: HTMLFormElement) {
-  const body = Object.fromEntries(new FormData(form).entries());
+  // Build the body from named fields only — never spread the whole FormData. If this page's
+  // form has its own hidden inputs (e.g. name="utm_campaign" for the site's own analytics),
+  // spreading would leak those raw snake_case keys into the JSON body alongside our computed
+  // camelCase ones, and the API rejects any property it doesn't recognize (whitelist + 400).
+  const formData = new FormData(form);
+  const body: Record<string, FormDataEntryValue | null> = {
+    firstName: formData.get('firstName'),
+    lastName: formData.get('lastName'),
+    companyName: formData.get('companyName'),
+    email: formData.get('email'),
+  };
   // UTM attribution: whatever the visitor's own URL carries wins. Only utm_source/utm_medium
   // fall back to this skill's defaults when the URL doesn't have them; utm_campaign/utm_term/
   // utm_content are only included when present on the URL.
@@ -447,15 +476,15 @@ value directly into the request payload in code — **never** as a form input, h
 The rendered page must not contain a `partnerKey` field of any kind for the visitor to see, inspect,
 or fill in.
 
-- **HTML/vanilla JS (Template 1)** — set it on the `body` object after
-  `Object.fromEntries(...)`, before `JSON.stringify`:
+- **HTML/vanilla JS (Template 1)** — set it on the `body` object right after it's built from the
+  named fields, before `JSON.stringify`:
   ```js
-  const body = Object.fromEntries(new FormData(form).entries());
+  const body = { firstName: formData.get('firstName'), /* …the rest… */ };
   body.partnerKey = '<their-key>'; // hardcoded here — not a form field
   ```
-- **React/Next.js (Template 2)** — same pattern, right after building `body` from `FormData`:
+- **React/Next.js (Template 2)** — same pattern, right after building `body` the same way:
   ```tsx
-  const body = Object.fromEntries(form.entries());
+  const body: Record<string, FormDataEntryValue | null> = { firstName: formData.get('firstName'), /* …the rest… */ };
   body.partnerKey = '<their-key>'; // hardcoded here — not a form field
   ```
 - **Server-side route handler (Template 3)** — the strongest option when `partnerKey` is in play:

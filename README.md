@@ -83,7 +83,15 @@ The plain HTML/JS template the skill hands back looks like this (trimmed):
 ```
 
 ```js
-const body = Object.fromEntries(new FormData(form).entries());
+// Built from named fields only — never a raw FormData spread, so hidden inputs on the page's
+// own form (e.g. its own analytics' name="utm_campaign") can't leak in as unrecognized keys.
+const formData = new FormData(form);
+const body = {
+  firstName: formData.get('firstName'),
+  lastName: formData.get('lastName'),
+  companyName: formData.get('companyName'),
+  email: formData.get('email'),
+};
 // utm_source/utm_medium come from the visitor's own URL when present, else fall back to
 // this skill's defaults; utm_campaign/utm_term/utm_content are only added when present.
 const params = new URLSearchParams(window.location.search);
