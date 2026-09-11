@@ -83,8 +83,6 @@ Use it as-is, verbatim, wherever a snippet calls EPD.
 - **Never create, read, or modify `.env` / `.env.local`**, and never use `process.env.*` for it.
   There is no configuration step.
 
-(To target a different backend, edit this skill file before running it — replace every
-`https://api-dev.dev1.epd.com` in it.)
 
 ---
 
@@ -132,7 +130,7 @@ one param that does ride the URL is plain, and one endpoint is all it takes.
 
 ## API contract
 
-Base URL: `https://api-dev.dev1.epd.com`. The endpoint is `@Public()` (no auth header, no API key).
+Base URL: `https://api-dev.dev1.epd.com`. No auth header, no API key required.
 
 ### `POST /v1/external-signup`
 
