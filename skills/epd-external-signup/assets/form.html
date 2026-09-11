@@ -1,0 +1,197 @@
+<!--
+  EPD external signup form - plain HTML + vanilla JS, no build step.
+
+  Copy this file as-is. Change only:
+    1. EPD_API_BASE, if the user named an environment other than dev
+    2. the styles, to match the host page
+
+  Do not rename the fields, drop the honeypot, or edit the UTM block.
+  Never add a partnerKey here. See references/partner-key.md.
+-->
+
+<style>
+  .epd-field { margin-bottom: 1rem; }
+  .epd-field label { display: block; margin-bottom: 0.25rem; }
+  .epd-field input { display: block; width: 100%; padding: 0.5rem; }
+  .epd-field input[aria-invalid='true'] { border-color: #c00; }
+  .epd-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  #epd-error { color: #c00; min-height: 1.25rem; }
+</style>
+
+<form id="epd-signup" novalidate>
+  <div class="epd-field">
+    <label for="epd-first-name">First name</label>
+    <input
+      id="epd-first-name"
+      name="firstName"
+      type="text"
+      autocomplete="given-name"
+      required
+      minlength="2"
+      maxlength="20"
+      pattern="[\p{L}\p{M} .'\-]{2,20}"
+    />
+  </div>
+
+  <div class="epd-field">
+    <label for="epd-last-name">Last name</label>
+    <input
+      id="epd-last-name"
+      name="lastName"
+      type="text"
+      autocomplete="family-name"
+      required
+      minlength="2"
+      maxlength="20"
+      pattern="[\p{L}\p{M} .'\-]{2,20}"
+    />
+  </div>
+
+  <div class="epd-field">
+    <label for="epd-company">Company name</label>
+    <input
+      id="epd-company"
+      name="companyName"
+      type="text"
+      autocomplete="organization"
+      required
+      minlength="3"
+      maxlength="150"
+    />
+  </div>
+
+  <div class="epd-field">
+    <label for="epd-email">Work email</label>
+    <input id="epd-email" name="email" type="email" autocomplete="email" required />
+  </div>
+
+  <!-- Honeypot. Hidden from people, filled by bots. Do not remove. -->
+  <div class="epd-hp" aria-hidden="true">
+    <label for="epd-website">Website</label>
+    <input id="epd-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+  </div>
+
+  <button type="submit">Next</button>
+  <p id="epd-error" role="alert"></p>
+</form>
+
+<script>
+  (function () {
+    const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
+
+    const form = document.getElementById('epd-signup');
+    const errorEl = document.getElementById('epd-error');
+    const button = form.querySelector('button[type="submit"]');
+
+    function clearErrors() {
+      errorEl.textContent = '';
+      for (const el of form.querySelectorAll('[aria-invalid]')) {
+        el.removeAttribute('aria-invalid');
+      }
+    }
+
+    function showError(message, field) {
+      errorEl.textContent = message;
+      if (!field) return;
+      const input = form.querySelector('[name="' + field + '"]');
+      if (input) {
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      }
+    }
+
+    function text(formData, key) {
+      const value = formData.get(key);
+      return typeof value === 'string' ? value.trim() : '';
+    }
+
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      clearErrors();
+
+      const formData = new FormData(form);
+
+      // Honeypot tripped. Act like it worked and send nothing.
+      if (text(formData, 'website')) return;
+
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      // Build the body from named fields only. Never spread the whole FormData:
+      // hidden inputs the host page already had would leak in as unrecognized
+      // keys and the API would reject the request.
+      const body = {
+        firstName: text(formData, 'firstName'),
+        lastName: text(formData, 'lastName'),
+        companyName: text(formData, 'companyName'),
+        email: text(formData, 'email'),
+      };
+
+      // UTM attribution. Read-only: never written back to the URL or history,
+      // never a form field. Real campaign values win; source and medium fall
+      // back so a bare link is still attributable.
+      const params = new URLSearchParams(window.location.search);
+      const utm = function (param) {
+        return (params.get(param) || '').trim().slice(0, 100);
+      };
+      body.utmSource = utm('utm_source') || 'partner';
+      body.utmMedium = utm('utm_medium') || 'skill_form';
+      for (const pair of [
+        ['utmCampaign', 'utm_campaign'],
+        ['utmTerm', 'utm_term'],
+        ['utmContent', 'utm_content'],
+      ]) {
+        const value = utm(pair[1]);
+        if (value) body[pair[0]] = value;
+      }
+
+      button.disabled = true;
+
+      try {
+        const res = await fetch(EPD_API_BASE + '/v1/external-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (res.status === 429) {
+          showError('Too many attempts. Please try again in a little while.');
+          button.disabled = false;
+          return;
+        }
+
+        const data = await res.json().catch(function () {
+          return null;
+        });
+
+        if (!res.ok) {
+          const fieldError = data && data.field_errors && data.field_errors[0];
+          showError(
+            (fieldError && fieldError.messages && fieldError.messages[0]) ||
+              'Please check your details and try again.',
+            fieldError && fieldError.field
+          );
+          button.disabled = false;
+          return;
+        }
+
+        if (!data || !data.redirectUrl) {
+          showError('Something went wrong. Please try again.');
+          button.disabled = false;
+          return;
+        }
+
+        // Works for both branches: a new lead goes to the OTP step, an existing
+        // account goes to login. data.alreadyRegistered tells you which, if you
+        // want to show a message before redirecting.
+        window.location.href = data.redirectUrl;
+        // Button stays disabled on purpose while the browser navigates away.
+      } catch (err) {
+        showError('Something went wrong. Please try again.');
+        button.disabled = false;
+      }
+    });
+  })();
+</script>

@@ -1,131 +1,143 @@
-# EPD External Signup
+# EPDC Skills
 
-An [Agent Skill](https://agentskills.io) that scaffolds a first-touch signup form for an **external page
-you control** — a blog, partner landing page, or marketing microsite — and wires it up to EPD's public
-`POST /v1/external-signup` endpoint.
+Agent Skills for integrating with EPD.
 
-## What it does
+| Skill | What it does |
+| --- | --- |
+| [`epd-external-signup`](skills/epd-external-signup) | Generates a first-touch signup form for an external site, wired to EPD's public signup API |
 
-The form collects **first name, last name, company name, and email**, then hands the visitor off to EPD
-to finish creating their account with email OTP + password. The visitor never re-types their name or
-company on EPD — those fields carry across on the redirect. Point your agent at [`SKILL.md`](SKILL.md)
-and it generates a ready-to-paste HTML or React form, or a Next.js server route, with no config file to
-write and no API key to obtain — the endpoint is deliberately anonymous because the whole point of
-calling it is to create a merchant that doesn't have one yet. Every generated form also reads UTM
-attribution (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`) straight off the
-visitor's own page URL at submit time and forwards it to EPD — real campaign data wins over the
-skill's own fallback values whenever it's present.
+## epd-external-signup
 
-## When to use it
+Scaffolds a signup form for a page **you control** - a blog, partner landing page,
+or marketing microsite. The form collects first name, last name, company name, and
+email, creates a lead in EPD, then hands the visitor to EPD to finish with email OTP
+and a password. They never re-type their name or company.
 
-- You want a signup form living on **your own domain**.
-- Example prompts: *"Build a signup form for our landing page using the EPD external signup skill"*,
-  *"Add an EPD lead-capture form to this Next.js page"*, *"Wire up first-touch signup with an email OTP
-  hand-off to EPD."*
+No API key, no config file. The endpoint is anonymous on purpose: the whole point of
+calling it is to create a merchant who does not have a key yet.
 
-## Install
+Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
+`utm_campaign`, `utm_term`, `utm_content`) read from the visitor's own page URL.
 
-**Option A — clone into your agent's skills directory**
+### Install
 
-Most agent CLIs/IDEs that support this skill format look for skills in a local directory (e.g. a
-`skills/` folder they watch). Clone this repo in as one:
+**Option A - clone into your agent's skills directory**
 
 ```bash
-git clone https://github.com/daptondev3/EPDC-Skills.git <your-agent's-skills-directory>/epd-external-signup
+git clone https://github.com/daptondev3/EPDC-Skills.git /tmp/epdc-skills
+cp -r /tmp/epdc-skills/skills/epd-external-signup <your-agent's-skills-directory>/
 ```
 
-Restart or reload your agent and the skill loads automatically.
+The directory name must stay `epd-external-signup` to match the skill's frontmatter.
 
-**Option B — `npx skills`**
+**Option B - `npx skills`**
 
 ```bash
 npx skills add daptondev3/EPDC-Skills
 ```
 
-**Option C — no install, just point your agent at the file**
+**Option C - no install**
 
-Clone or download this repo, then tell your agent:
-
-```
-Build the signup form using this specification: SKILL.md
-```
-
-## Usage
-
-1. Ask your agent to build the form (see example prompts above).
-2. It stops once and asks the gate question below — answer it, and generation proceeds.
-3. You get back a self-contained template (HTML+JS, React, or a Next.js route handler) already pointed
-   at EPD's backend, ready to paste with nothing left to configure.
-
-### The gate question
-
-Before generating anything, the skill asks:
-
-> Do you have a partner/referral key for this integration?
-
-Most integrations don't — if you're not sure, say no and `partnerKey` is omitted entirely. When you do
-have one, the skill hardcodes it into the request payload in code; it is **never** a form field the
-visitor can see, type into, or inspect. See
-[`SKILL.md`](SKILL.md#before-generating-anything-ask-about-partnerkey) for the full rationale.
-
-## Example output
-
-The plain HTML/JS template the skill hands back looks like this (trimmed):
-
-```html
-<form id="epd-signup">
-  <input name="firstName"   placeholder="First name"   required minlength="2"  maxlength="20" />
-  <input name="lastName"    placeholder="Last name"    required minlength="2"  maxlength="20" />
-  <input name="companyName" placeholder="Company name" required minlength="3"  maxlength="150" />
-  <input name="email"       placeholder="Work email"   required type="email" />
-  <button type="submit">Next</button>
-</form>
-```
-
-```js
-// Built from named fields only — never a raw FormData spread, so hidden inputs on the page's
-// own form (e.g. its own analytics' name="utm_campaign") can't leak in as unrecognized keys.
-const formData = new FormData(form);
-const body = {
-  firstName: formData.get('firstName'),
-  lastName: formData.get('lastName'),
-  companyName: formData.get('companyName'),
-  email: formData.get('email'),
-};
-// utm_source/utm_medium come from the visitor's own URL when present, else fall back to
-// this skill's defaults; utm_campaign/utm_term/utm_content are only added when present.
-const params = new URLSearchParams(window.location.search);
-body.utmSource = params.get('utm_source') || 'partner';
-body.utmMedium = params.get('utm_medium') || 'skill_form';
-
-const res = await fetch(`${EPD_API_BASE}/v1/external-signup`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
-const { redirectUrl } = await res.json();
-window.location.href = redirectUrl; // EPD's /auth page takes it from here (OTP → password → account)
-```
-
-The full versions (with error handling, `partnerKey` injection, the full 5-field UTM pass-through,
-React, and a server-side Next.js route handler) are in
-[`SKILL.md`](SKILL.md#ready-to-paste-templates).
-
-## What's inside `SKILL.md`
-
-- The `POST /v1/external-signup` API contract — request/response shapes, field validation rules, rate limits
-- The full first-touch → EPD hand-off flow (OTP, prefill, account creation)
-- Ready-to-paste templates: plain HTML + vanilla JS, React/Next.js, and a Next.js server-side route handler
-- Guidance on calling the endpoint client-side vs. server-side (CORS is already open on EPD's side)
-- An error-handling checklist (validation errors, rate limiting, already-registered emails)
-
-## What's included
+Clone the repo and point your agent at the file:
 
 ```
-EPDC-Skills/
-├── README.md    this file
-└── SKILL.md     the skill — entry point for your agent (frontmatter: name, description)
+Build the signup form using this specification: skills/epd-external-signup/SKILL.md
 ```
 
-No `references/`, `scripts/`, or `assets/` directories — the whole skill lives in the one file, and the
-templates it generates are self-contained (no separate config).
+### Usage
+
+Ask your agent for the form:
+
+- *"Build a signup form for our landing page using the EPD external signup skill"*
+- *"Add an EPD lead-capture form to this Next.js page"*
+- *"Wire up first-touch signup with an email OTP hand-off to EPD"*
+
+It asks one question first - whether you're registered as an Easy Pay Direct
+partner - then copies a template into your project, already pointed at EPD's
+backend.
+
+### The partner key
+
+A partner key credits signup commission to you on every account the form creates.
+It is optional. The skill asks about it first, and there are three ways to answer:
+
+| You are | What happens |
+| --- | --- |
+| A registered Easy Pay Direct partner | Paste your key (find it in your partner account at https://emap.epd.dev) and it gets wired in server-side |
+| Not registered | You get a link to register at https://emap.epd.dev/signup/partner - but the build does not wait for you |
+| Not interested | Skip it. The form works exactly the same, no commission is credited |
+
+Skipping is safe and reversible. You can add a key to a finished form later; see
+[`references/partner-key.md`](skills/epd-external-signup/references/partner-key.md#adding-a-key-later)
+for how much work that is on each template.
+
+If you do provide a key, **the skill uses the server-side template**. That is not
+a preference. The API has no signature or origin check on the key, so anyone who
+can view-source a page containing it can farm signups against your commission
+account. The server-side route keeps it out of the browser entirely.
+
+### Layout
+
+```
+skills/epd-external-signup/
+├── SKILL.md                     entry point - decisions and routing only
+├── references/                  the agent reads these on demand
+│   ├── api.md                   request/response contract, validation, rate limits
+│   ├── partner-key.md           commission wiring and why it must stay server-side
+│   └── troubleshooting.md       symptom -> cause -> fix
+├── assets/                      the agent copies these; it does not retype them
+│   ├── form.html                plain HTML + vanilla JS, no build step
+│   ├── form.tsx                 React / Next.js client component
+│   └── route.ts                 Next.js route handler (required for partner keys)
+└── scripts/
+    └── verify.mjs               checks a generated file before you ship it
+```
+
+The split is deliberate. `SKILL.md` holds only what the agent needs to *decide* what
+to do, so it stays cheap to load. `references/` holds detail pulled in on demand.
+`assets/` holds complete working files that get **copied**, not regenerated from a
+code block in a prompt - which is what keeps the generated form byte-correct
+regardless of which model is driving.
+
+### Verifying generated code
+
+```bash
+node skills/epd-external-signup/scripts/verify.mjs path/to/your/form.tsx
+```
+
+Checks field names, labels, the honeypot, the UTM block, the `redirectUrl` guard,
+and that no partner key leaked into client-side code. Exits non-zero on failure, so
+it drops straight into CI.
+
+### Before going live
+
+Two sets of URLs in this skill point at dev environments:
+
+| | Currently | Used by |
+| --- | --- | --- |
+| API base | `https://api-dev.dev1.epd.com` | `EPD_API_BASE` in every template |
+| Partner portal | `https://emap.epd.dev` | where partners register and find their key |
+
+The skill hardcodes these rather than reading config, so the templates stay
+copy-paste correct for any agent. The trade-off is that going live means
+rewriting them in several files. One command does it:
+
+```bash
+# See what is in use and where
+node skills/epd-external-signup/scripts/set-environment.mjs
+
+# Rewrite everything at once
+node skills/epd-external-signup/scripts/set-environment.mjs \
+  --api-base=https://api.example.com \
+  --portal=https://portal.example.com
+```
+
+Add the check to CI so a dev host cannot ship silently:
+
+```bash
+node skills/epd-external-signup/scripts/set-environment.mjs --check
+```
+
+It exits non-zero while any dev host remains. This matters most for the partner
+portal link: a wrong API base fails loudly, but a partner who registers in the
+wrong environment just quietly never gets paid.
