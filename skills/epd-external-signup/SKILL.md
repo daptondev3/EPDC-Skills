@@ -16,11 +16,15 @@ Do not use this for authenticated merchant API calls. Those need an API key and 
 to other `/v1/*` endpoints. This endpoint is anonymous on purpose: the merchant does
 not exist yet, so there is no key to send.
 
+These instructions work in any coding agent (Claude, OpenAI Codex or ChatGPT, v0,
+Replit Agent, Cursor, and others). Where a step depends on what your environment
+can do, it says so.
+
 ## Steps
 
 1. Ask the partner key question (Step 1).
 2. Pick a template (Step 2).
-3. Copy that file into the user's project. Copy it. Do not retype it.
+3. Put that template in the user's project verbatim. Do not retype it from memory.
 4. Change only the two things listed in Step 3.
 5. Tell the user the base URL points at dev.
 
@@ -33,19 +37,26 @@ even if the user did not mention partners.
 >
 > A partner key credits signup commission to you on every account this form creates.
 >
-> - **Yes** - paste your partner key. You'll find it in your partner account
->   at https://emap.epd.dev.
+> - **Yes** - paste your partner key.
 > - **No** - you can register at https://emap.epd.dev/signup/partner.
 > - **Skip** - I'll build the form without one. Everything works, and you can
 >   add a key later.
+>
+> **Where to find your key:** log in to the partner portal at https://emap.epd.dev
+> → **Integration** → **API Integration** → click **API Documentation**. Your key
+> is shown as **API Key - Authorization: `<your key>`**. Copy just the key value
+> and paste it here.
+
+If your environment cannot pause to ask a question, treat the answer as **Skip**
+and say so in your final message.
 
 Then act on the answer:
 
 | Answer | Do this |
 | --- | --- |
 | Pastes a key | Read `references/partner-key.md`. Use the server-side template (Step 2 row 1). Confirm the key is wired in |
-| Registered, key not to hand | Point them at their partner account at https://emap.epd.dev. Offer to build without it now and add it later |
-| Not registered | Give them https://emap.epd.dev/signup/partner. **Do not block on this.** Offer to build without it now and add it later |
+| Registered, key not to hand | Give them the steps: log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:**. Offer to build without it now and add it later |
+| Not registered | Give them https://emap.epd.dev/signup/partner, and tell them that once registered the key is under **Integration** → **API Integration** → **API Documentation**. **Do not block on this.** Offer to build without it now and add it later |
 | Skip, or no clear answer | Build without it. Change nothing in the template. This is the common case and is completely safe |
 
 Never block the build waiting for a partner key. Registering takes time the user
@@ -74,6 +85,16 @@ Check the rows in order. The first match wins.
 | React or Next.js, no partner key | `assets/form.tsx` |
 | Plain HTML site, no build step | `assets/form.html` |
 | Stack unclear | `assets/form.html` |
+
+How to "copy" depends on your environment:
+
+- **You can read the skill's files**: copy the file from `assets/` into the
+  user's project.
+- **You only have the skill as pasted or attached text**: reproduce the template
+  exactly as provided. If the template was not provided, ask the user to paste it
+  rather than writing your own.
+- **You cannot write to the user's project**: output the file and tell the user
+  the path to save it at.
 
 `assets/form.tsx` posts to your own app by default. Change its `ENDPOINT` constant
 to EPD's URL when there is no route handler. The file says where.
@@ -113,15 +134,25 @@ Never make these form fields. Never write them back to the URL or browser histor
 
 ## Checking your work
 
-After copying a template, run:
+If you can run Node, run this on each generated file:
 
 ```
-node skills/epd-external-signup/scripts/verify.mjs <path-to-generated-file>
+node <path-to-this-skill>/scripts/verify.mjs <path-to-generated-file>
 ```
 
 It checks field names, validation attributes, the UTM block, and that no partner
 key leaked into client code. Fix anything it reports before telling the user you
 are done.
+
+If you cannot run commands, check these yourself instead:
+
+- Inputs are named exactly `firstName`, `lastName`, `companyName`, `email`, and each has a label
+- The honeypot input `name="website"` is still there
+- The request body is built from named fields, never by spreading `FormData`
+- All five `utm_*` params are read, with the `partner` and `skill_form` fallbacks
+- The code checks `redirectUrl` exists before navigating to it
+- No partner key appears in any file that reaches the browser
+- `EPD_API_BASE` is a hardcoded `https://` string, not an env var
 
 ## More detail
 

@@ -8,8 +8,12 @@ on it. Whoever holds the string collects the commission.
 
 | Situation | Where to point them |
 | --- | --- |
-| Registered as an Easy Pay Direct partner | Their partner account at https://emap.epd.dev |
-| Not registered | https://emap.epd.dev/signup/partner |
+| Registered as an Easy Pay Direct partner | Log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:** |
+| Not registered | Register at https://emap.epd.dev/signup/partner, then follow the same steps |
+
+The portal labels the key "API Key - Authorization". Use only the key value as
+the partner key. Do not include the label or the word "Authorization", and do not
+send it as an `Authorization` header.
 
 Registering is not instant and the user may not want to do it mid-task. Never
 hold the build hostage to it. Build the form without a key, hand it over, and
