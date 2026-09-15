@@ -40,9 +40,11 @@ For example:
 # Claude Code - this project only
 cp -r /tmp/epdc-skills/skills/epd-external-signup .claude/skills/
 
-# OpenAI Codex
-cp -r /tmp/epdc-skills/skills/epd-external-signup ~/.codex/skills/
+
+# OpenAI Codex - this project only
+cp -r /tmp/epdc-skills/skills/epd-external-signup .agents/skills/
 ```
+
 
 Create the skills directory first (`mkdir -p`) if it does not exist yet.
 
