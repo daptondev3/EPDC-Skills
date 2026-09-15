@@ -1,76 +1,71 @@
 # EPDC Skills
 
-Agent Skills for integrating with EPD.
-
-| Skill | What it does |
-| --- | --- |
-| [`epd-external-signup`](skills/epd-external-signup) | Generates a first-touch signup form for an external site, wired to EPD's public signup API |
-
-## epd-external-signup
-
-Scaffolds a signup form for a page **you control** - a blog, partner landing page,
-or marketing microsite. The form collects first name, last name, company name, and
-email, creates a lead in EPD, then hands the visitor to EPD to finish with email OTP
-and a password. They never re-type their name or company.
-
-No API key, no config file. The endpoint is anonymous on purpose: the whole point of
-calling it is to create a merchant who does not have a key yet.
+This skill is for anyone who wants a signup form on a page **they control** - a blog,
+partner landing page, or marketing microsite - that captures leads for Easy Pay
+Direct (EPD). Give it to your AI agent and it builds a first-touch signup form
+(first name, last name, company, email) that creates a lead in EPD, then hands the
+visitor to EPD to finish account creation with email OTP and a password. Registered
+EPD partners can wire in their partner key so every signup the form drives is
+attributed to them for commission.
 
 Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
 `utm_campaign`, `utm_term`, `utm_content`) read from the visitor's own page URL.
 
-### Install
+## Installation
 
-**Option A - `npx skills`**
+**What you'll need**
+
+- **A partner API key (optional)**, from the [EPD partner portal](https://emap.epd.dev/signup/partner).
+  It's what attributes signups to you for commission.
+- **An AI coding assistant** (Claude Code, Cursor, OpenAI Codex, etc.). This is what
+  actually builds the form from the skill. App builders like v0 or Replit work too,
+  as long as you can give them the `SKILL.md` contents to build from.
+- **Node.js**, only for the `npx` install method below; not needed if you copy the
+  skill manually. Get it at [nodejs.org](https://nodejs.org).
+
+> Not comfortable with a terminal? You can skip the commands entirely. Open your AI
+> assistant, give it the skill (paste the link to `SKILL.md`), and ask it to build
+> the form for you.
+
+**1. Get the skill**
+
+*Option A: `npx skills` (recommended)*
+
+> **Before you run this, you need Node.js installed.** It's what provides the `npx`
+> command. Download it from [nodejs.org](https://nodejs.org) (pick the "LTS" version
+> and click through the installer), then reopen your terminal. To check it worked,
+> run `node --version`; if it prints a version number you're set. If `npx` still
+> isn't found after installing, close and reopen the terminal.
 
 ```bash
 npx skills add daptondev3/EPDC-Skills
 ```
 
-**Option B - clone into your agent's skills directory**
+*Option B: download it (no terminal needed)*
 
-```bash
-git clone https://github.com/daptondev3/EPDC-Skills.git /tmp/epdc-skills
-cp -r /tmp/epdc-skills/skills/epd-external-signup <your-agent's-skills-directory>/
-```
+1. Click the green **Code** button -> **Download ZIP**, then unzip it.
+2. The skill is the `skills/epd-external-signup` folder inside. Point your agent at
+   it (next step), or drop that folder wherever your agent reads skills from.
 
-For example:
+**2. Point your agent at it**
 
-```bash
-# Claude Code - this project only
-cp -r /tmp/epdc-skills/skills/epd-external-signup .claude/skills/
+Tell your AI assistant to build the form from `SKILL.md`. A few examples:
 
-
-# OpenAI Codex - this project only
-cp -r /tmp/epdc-skills/skills/epd-external-signup .agents/skills/
-```
-
-
-Create the skills directory first (`mkdir -p`) if it does not exist yet.
-
-The directory name must stay `epd-external-signup` to match the skill's frontmatter.
-
-**Option C - no install**
-
-Clone the repo and point your agent at the file:
-
+*Claude:*
 ```
 Build the signup form using this specification: skills/epd-external-signup/SKILL.md
 ```
 
-### Usage
-
-Ask your agent for the form:
-
-- *"Build a signup form for our landing page using the EPD external signup skill"*
-- *"Add an EPD lead-capture form to this Next.js page"*
-- *"Wire up first-touch signup with an email OTP hand-off to EPD"*
+*Any other agent:*
+```
+Generate the signup form described in skills/epd-external-signup/SKILL.md.
+```
 
 It asks one question first - whether you're registered as an Easy Pay Direct
 partner - then copies a template into your project, already pointed at EPD's
 backend.
 
-### The partner key
+## The Partner Key
 
 A partner key credits signup commission to you on every account the form creates.
 It is optional. The skill asks about it first, and there are three ways to answer:
@@ -90,7 +85,7 @@ a preference. The API has no signature or origin check on the key, so anyone who
 can view-source a page containing it can farm signups against your commission
 account. The server-side route keeps it out of the browser entirely.
 
-### Layout
+## Folder Structure
 
 ```
 skills/epd-external-signup/
@@ -113,45 +108,8 @@ to do, so it stays cheap to load. `references/` holds detail pulled in on demand
 code block in a prompt - which is what keeps the generated form byte-correct
 regardless of which model is driving.
 
-### Verifying generated code
+## Current Skills
 
-```bash
-node skills/epd-external-signup/scripts/verify.mjs path/to/your/form.tsx
-```
-
-Checks field names, labels, the honeypot, the UTM block, the `redirectUrl` guard,
-and that no partner key leaked into client-side code. Exits non-zero on failure, so
-it drops straight into CI.
-
-### Before going live
-
-Two sets of URLs in this skill point at dev environments:
-
-| | Currently | Used by |
-| --- | --- | --- |
-| API base | `https://api-dev.dev1.epd.com` | `EPD_API_BASE` in every template |
-| Partner portal | `https://emap.epd.dev` | where partners register and find their key |
-
-The skill hardcodes these rather than reading config, so the templates stay
-copy-paste correct for any agent. The trade-off is that going live means
-rewriting them in several files. One command does it:
-
-```bash
-# See what is in use and where
-node skills/epd-external-signup/scripts/set-environment.mjs
-
-# Rewrite everything at once
-node skills/epd-external-signup/scripts/set-environment.mjs \
-  --api-base=https://api.example.com \
-  --portal=https://portal.example.com
-```
-
-Add the check to CI so a dev host cannot ship silently:
-
-```bash
-node skills/epd-external-signup/scripts/set-environment.mjs --check
-```
-
-It exits non-zero while any dev host remains. This matters most for the partner
-portal link: a wrong API base fails loudly, but a partner who registers in the
-wrong environment just quietly never gets paid.
+| Skill | Entry point |
+| --- | --- |
+| EPD External Signup | [`skills/epd-external-signup/SKILL.md`](skills/epd-external-signup/SKILL.md) |
