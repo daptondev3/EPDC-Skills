@@ -21,20 +21,32 @@ Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
 
 ### Install
 
-**Option A - clone into your agent's skills directory**
+**Option A - `npx skills`**
+
+```bash
+npx skills add daptondev3/EPDC-Skills
+```
+
+**Option B - clone into your agent's skills directory**
 
 ```bash
 git clone https://github.com/daptondev3/EPDC-Skills.git /tmp/epdc-skills
 cp -r /tmp/epdc-skills/skills/epd-external-signup <your-agent's-skills-directory>/
 ```
 
-The directory name must stay `epd-external-signup` to match the skill's frontmatter.
-
-**Option B - `npx skills`**
+For example:
 
 ```bash
-npx skills add daptondev3/EPDC-Skills
+# Claude Code - this project only
+cp -r /tmp/epdc-skills/skills/epd-external-signup .claude/skills/
+
+# OpenAI Codex
+cp -r /tmp/epdc-skills/skills/epd-external-signup ~/.codex/skills/
 ```
+
+Create the skills directory first (`mkdir -p`) if it does not exist yet.
+
+The directory name must stay `epd-external-signup` to match the skill's frontmatter.
 
 **Option C - no install**
 
@@ -63,7 +75,7 @@ It is optional. The skill asks about it first, and there are three ways to answe
 
 | You are | What happens |
 | --- | --- |
-| A registered Easy Pay Direct partner | Paste your key (find it in your partner account at https://emap.epd.dev) and it gets wired in server-side |
+| A registered Easy Pay Direct partner | Paste your key and it gets wired in server-side. To find it: log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:** |
 | Not registered | You get a link to register at https://emap.epd.dev/signup/partner - but the build does not wait for you |
 | Not interested | Skip it. The form works exactly the same, no commission is credited |
 
