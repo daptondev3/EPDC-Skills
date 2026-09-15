@@ -56,6 +56,11 @@ Tell your AI assistant to build the form from `SKILL.md`. A few examples:
 Build the signup form using this specification: skills/epd-external-signup/SKILL.md
 ```
 
+*OpenAI Codex:*
+```
+Build the signup form using this specification: skills/epd-external-signup/SKILL.md
+```
+
 *Any other agent:*
 ```
 Generate the signup form described in skills/epd-external-signup/SKILL.md.
