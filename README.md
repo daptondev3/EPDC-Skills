@@ -1,11 +1,10 @@
 # EPDC Skills
 
 This skill is for anyone who wants a signup form on a page **they control** - a blog,
-partner landing page, or marketing microsite - that captures leads for Easy Pay
-Direct (EPD). Give it to your AI agent and it builds a first-touch signup form
-(first name, last name, company, email) that creates a lead in EPD, then hands the
-visitor to EPD to finish account creation with email OTP and a password. Registered
-EPD partners can wire in their partner key so every signup the form drives is
+partner landing page, or marketing microsite, that captures leads for EPD Commerce. Give it to your AI agent and it builds a first-touch signup form
+(first name, last name, company, email) that creates a lead in EasyPayDirect, then hands the
+visitor to EPD Commerce to finish account creation with email OTP and a password. Registered
+EasyPayDirect partners can wire in their partner key so every signup the form drives is
 attributed to them for commission.
 
 Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
@@ -15,7 +14,7 @@ Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
 
 **What you'll need**
 
-- **A partner API key (optional)**, from the [EPD partner portal](https://emap.epd.dev/signup/partner).
+- **A partner API key (optional)**, from the [EasyPayDirect partner portal](https://emap.epd.dev/signup/partner).
   It's what attributes signups to you for commission.
 - **An AI coding assistant** (Claude Code, Cursor, OpenAI Codex, etc.). This is what
   actually builds the form from the skill. App builders like v0 or Replit work too,
