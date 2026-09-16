@@ -126,9 +126,13 @@ This is a dev endpoint. After generating, tell the user:
 Already handled by every template. Do not ask the user about it.
 
 Each template reads `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, and
-`utm_content` from its own page URL and sends them with the signup. Real campaign
-values win. `utm_source` and `utm_medium` fall back to `partner` and `skill_form`
-when the URL has neither. The other three are omitted when absent.
+`utm_content` from its own page URL and sends them with the signup. All five are
+treated the same way: sent when the URL carries them, omitted when it does not.
+
+There are no default values. Do not add any. A visitor arriving on a bare link
+creates a signup with no UTM data, which is the honest record. Inventing a source
+would make untracked traffic indistinguishable from a real campaign in EPD's
+reporting.
 
 Never make these form fields. Never write them back to the URL or browser history.
 
@@ -149,7 +153,8 @@ If you cannot run commands, check these yourself instead:
 - Inputs are named exactly `firstName`, `lastName`, `companyName`, `email`, and each has a label
 - The honeypot input `name="website"` is still there
 - The request body is built from named fields, never by spreading `FormData`
-- All five `utm_*` params are read, with the `partner` and `skill_form` fallbacks
+- All five `utm_*` params are read, each omitted when the URL has no value, with
+  no hardcoded fallbacks
 - The code checks `redirectUrl` exists before navigating to it
 - No partner key appears in any file that reaches the browser
 - `EPD_API_BASE` is a hardcoded `https://` string, not an env var

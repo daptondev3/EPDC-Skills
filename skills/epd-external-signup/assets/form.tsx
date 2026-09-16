@@ -71,13 +71,14 @@ export function EpdSignupForm() {
     };
 
     // UTM attribution. Read-only: never written back to the URL or history,
-    // never a form field. Real campaign values win; source and medium fall
-    // back so a bare link is still attributable.
+    // never a form field. Each value is sent only when the page URL carries it.
+    // No defaults: a bare link produces a signup with no UTM data rather than
+    // invented attribution.
     const params = new URLSearchParams(window.location.search);
     const utm = (param: string) => (params.get(param) ?? '').trim().slice(0, 100);
-    body.utmSource = utm('utm_source') || 'partner';
-    body.utmMedium = utm('utm_medium') || 'skill_form';
     for (const [bodyKey, param] of [
+      ['utmSource', 'utm_source'],
+      ['utmMedium', 'utm_medium'],
       ['utmCampaign', 'utm_campaign'],
       ['utmTerm', 'utm_term'],
       ['utmContent', 'utm_content'],

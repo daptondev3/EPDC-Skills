@@ -43,10 +43,15 @@ export async function POST(req: NextRequest) {
   };
 
   // UTM attribution. The visitor's page URL lives in the browser, not here, so
-  // the client resolved these already. Fall back only as a safety net.
-  body.utmSource = str(raw.utmSource, MAX_UTM_LENGTH) || 'partner';
-  body.utmMedium = str(raw.utmMedium, MAX_UTM_LENGTH) || 'skill_form';
-  for (const key of ['utmCampaign', 'utmTerm', 'utmContent'] as const) {
+  // the client resolved these already. Forward what it sent and invent nothing:
+  // a value the URL did not carry is simply absent.
+  for (const key of [
+    'utmSource',
+    'utmMedium',
+    'utmCampaign',
+    'utmTerm',
+    'utmContent',
+  ] as const) {
     const value = str(raw[key], MAX_UTM_LENGTH);
     if (value) body[key] = value;
   }

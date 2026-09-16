@@ -9,6 +9,8 @@ attributed to them for commission.
 
 Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
 `utm_campaign`, `utm_term`, `utm_content`) read from the visitor's own page URL.
+Each one is passed through only when the URL actually carries it - there are no
+default values, so an untracked visit is recorded as untracked.
 
 ## Installation
 

@@ -63,15 +63,27 @@ const checks = [
     },
   },
   {
-    // Every file that calls EPD must send source and medium, however it got them.
-    name: 'UTM source and medium have fallbacks',
-    applies: (src) => src.includes('utmSource') || src.includes('utmMedium'),
+    // Nothing is invented: a UTM value is forwarded only when the URL carried it.
+    name: 'UTM values are sent only when present',
+    applies: (src) => /utm(Source|Medium|Campaign|Term|Content)/.test(src),
     run: (src) => {
-      if (!src.includes('utmSource') || !src.includes('utmMedium')) {
-        return 'utmSource and utmMedium must both be sent';
-      }
-      const missing = ['partner', 'skill_form'].filter((t) => !src.includes(t));
-      return missing.length ? `fallback value(s) removed: ${missing.join(', ')}` : null;
+      const missing = [
+        'utmSource',
+        'utmMedium',
+        'utmCampaign',
+        'utmTerm',
+        'utmContent',
+      ].filter((k) => !src.includes(k));
+      if (missing.length) return `UTM block edited, missing: ${missing.join(', ')}`;
+
+      // Any non-empty literal defaulted onto a UTM line invents attribution.
+      // `|| ''` is fine: that is the "no value" case.
+      const hardcoded = src
+        .split('\n')
+        .find((line) => /utm/i.test(line) && /(\|\||\?\?)\s*['"][^'"]+['"]/.test(line));
+      return hardcoded
+        ? `hardcoded UTM fallback: ${hardcoded.trim()} - send nothing when the URL has no value`
+        : null;
     },
   },
   {
