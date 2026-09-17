@@ -60,18 +60,23 @@ const checks = [
     name: 'every input has a label',
     applies: (src) => /<input/i.test(src),
     run: (src) => {
-      const ids = [...src.matchAll(/<input[^>]*\sid=["']([^"']+)["']/gi)].map((m) => m[1]);
-      const unlabelled = ids.filter(
-        (id) => !new RegExp(`(for|htmlFor)=["']${id}["']`).test(src)
+      // id="epd-email" in HTML, or id={`${id}-email`} from useId in React.
+      const ids = [...src.matchAll(/<input[^>]*\sid=("[^"]+"|'[^']+'|\{[^}]*\}(?:[^}\s]*\})?)/gi)].map(
+        (m) => m[1]
       );
-      return unlabelled.length ? `no label for: ${unlabelled.join(', ')}` : null;
+      const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const unlabelled = ids.filter((id) => !new RegExp(`(for|htmlFor)=${escape(id)}`).test(src));
+      return unlabelled.length
+        ? `no label for: ${unlabelled.map((id) => id.replace(/^["']|["']$/g, '')).join(', ')}`
+        : null;
     },
   },
   {
     // iOS and macOS smart punctuation types ’. The API rejects it, and so does
     // the name pattern, which blocks the submit with no useful message.
     name: 'curly apostrophes in names are converted',
-    applies: (src) => /name=["']firstName["']/.test(src),
+    // The file that submits, not markup split out from its script.
+    applies: (src) => /firstName/.test(src) && /new FormData\(/.test(src),
     run: (src) =>
       /\\u2019/.test(src) ? null : "the ’ to ' conversion for firstName/lastName was removed",
   },
@@ -80,8 +85,9 @@ const checks = [
     // script never set up) falls back to a GET with the visitor's details in the URL.
     name: 'form posts, never GETs',
     applies: (src) => /<form/i.test(src),
+    // `=>` is skipped so an arrow function in onSubmit does not end the tag early.
     run: (src) =>
-      /<form[^>]*\smethod=["']post["']/i.test(src)
+      /<form\b(?:=>|[^>])*\smethod=["']post["']/i.test(src)
         ? null
         : 'the <form> lost method="post"; if the script does not run, details land in the URL',
   },
@@ -94,6 +100,41 @@ const checks = [
       /getElementById\(\s*['"]epd-signup['"]\s*\)/.test(src)
         ? 'the script finds the form by id, so a second copy on the page is never set up'
         : null,
+  },
+  {
+    // A button with type="button", or a link styled as one, cannot submit.
+    name: 'form has a submit button',
+    applies: (src) => /<form/i.test(src),
+    run: (src) =>
+      /<button\b(?![^>]*\stype=["'](button|reset)["'])|<input\b[^>]*\stype=["']submit["']/i.test(src)
+        ? null
+        : 'no submit button in the form; keep a <button> without type="button" (or type="submit")',
+  },
+  {
+    // A script placed above the form (in <head>, or enqueued by a theme) runs
+    // before the form exists, finds nothing, and the browser submits natively.
+    name: 'script waits for the page before looking for the form',
+    applies: (src) => /form\[data-epd-signup/.test(src),
+    run: (src) =>
+      /DOMContentLoaded|readyState/.test(src)
+        ? null
+        : 'the script looks for the form immediately; if it sits above the form it never binds. Recopy assets/form.html',
+  },
+  {
+    // Restyling swaps in the site's own button (no type="submit") or error text
+    // (no role="alert"). An exact-attribute lookup then returns null and the
+    // submit handler crashes after preventDefault: the visitor sees nothing.
+    name: 'button and message area survive restyling',
+    applies: (src) => /form\[data-epd-signup/.test(src),
+    run: (src) => {
+      if (/querySelector\(\s*['"]button\[type=["']submit["']\]['"]\s*\)/.test(src)) {
+        return 'the script only finds button[type="submit"]; a restyled button without it leaves the form dead. Recopy assets/form.html';
+      }
+      if (/\[role=["']alert["']\]/.test(src) && !/createElement\(/.test(src)) {
+        return 'the script needs an element with role="alert" and does not create one; without it the form is dead. Recopy assets/form.html';
+      }
+      return null;
+    },
   },
   {
     // Back button after the redirect restores the page from cache with the
@@ -167,7 +208,7 @@ const checks = [
     name: 'redirectUrl is guarded before navigating',
     applies: (src) => src.includes('redirectUrl'),
     run: (src) =>
-      /(!data\??\.?redirectUrl|!data \|\| !data\.redirectUrl|redirectUrl\s*\?)/.test(src)
+      /!\s*(data\s*\??\.\s*)?redirectUrl\b|!data\s*\|\|\s*!data\.redirectUrl|redirectUrl\s*\?(?![:.?])/.test(src)
         ? null
         : 'navigating to redirectUrl without checking it exists',
   },
@@ -190,7 +231,7 @@ const checks = [
     name: 'rate limit reads Retry-After',
     applies: (src) => /429/.test(src),
     run: (src) =>
-      /headers\.get\(\s*['"]retry-after['"]\s*\)/i.test(src)
+      /headers\s*(\.get\(\s*|\[\s*)['"]retry-after['"]/i.test(src)
         ? null
         : 'a 429 is handled without Retry-After, so the visitor is not told how long to wait',
   },
@@ -242,7 +283,8 @@ const checks = [
   },
   {
     name: 'base URL points somewhere real',
-    applies: (src) => src.includes('EPD_API_BASE'),
+    // Where it is assigned, not a mention in a comment.
+    applies: (src) => /EPD_API_BASE\s*=/.test(src),
     run: (src) =>
       /EPD_API_BASE\s*=\s*['"]https:\/\/[^'"]+['"]/.test(src)
         ? null

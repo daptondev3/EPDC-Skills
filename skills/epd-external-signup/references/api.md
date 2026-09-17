@@ -70,13 +70,16 @@ also passes final account creation. No surprise rejection later.
 
 ### Known gaps in these rules
 
-Confirm these with the backend team before a partner ships a page:
+These are the server's rules. The form cannot work around them:
 
-- **Character set is ambiguous.** "Letters" may mean ASCII `A-Za-z` or Unicode.
-  If it is ASCII-only, every name with an accent or a non-Latin script is
-  rejected. The templates use a permissive Unicode `pattern` in the browser and
-  let the server be authoritative, so users see the server's message rather than
-  a silent block.
+- **Names accept Western European letters only.** The server allows `A-Z`,
+  `a-z`, and the accented letters `À`-`ÿ` (José, Zoë, Müller), plus spaces,
+  periods, hyphens, and straight apostrophes. Anything else is rejected:
+  `Łukasz`, `Dvořák`, `Nguyễn`, non-Latin scripts, and an accent stored as a
+  separate combining mark. The templates' browser `pattern` is wider, so these
+  names reach the server and come back as a 400 with the server's message ("First
+  name can only contain letters, spaces, periods, hyphens, and apostrophes."),
+  which the form shows on the field.
 - **`companyName` minimum of 3 rejects real companies.** "3M" and "BP" are two
   characters.
 
@@ -109,11 +112,8 @@ account" message first.
 
 ### Success status code
 
-**Unverified.** Earlier documentation claimed both `200` and `201` for these two
-branches in different places. Until the backend team confirms, treat any 2xx as
-success. Every template branches on `res.ok`, never on an exact status code, so
-both are safe. `201 Created` for the `alreadyRegistered` branch would be wrong
-regardless, since nothing is created.
+`201` for both branches, including `alreadyRegistered: true`, where nothing new
+is created. Every template branches on `res.ok`, never on an exact status code.
 
 ### Response 400 - validation failed
 

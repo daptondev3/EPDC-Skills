@@ -8,8 +8,11 @@ Check the browser console and network tab first.
 | --- | --- | --- |
 | No network request at all | The submit handler never ran, or a validation attribute is blocking | Confirm the `<form>` still has `data-epd-signup` and the script is on the page. Check for a JS error earlier on the page |
 | Page reloads, nothing is created | The script was stripped (some site builders remove `<script>`), so the browser submitted the form itself | Put the form in a block that allows scripts, e.g. WordPress **Custom HTML** as an Administrator. `method="post"` keeps the details out of the URL meanwhile |
+| Clicking Next does nothing, console shows `Cannot set properties of null` | An older `form.html` that needed `type="submit"` on the button and `role="alert"` on the message, restyled without them | Recopy the template from `assets/` |
+| No network request, and the script sits above the form | An older `form.html` that looked for the form before the page finished loading | Recopy the template from `assets/` |
 | Visitor's name and email appear in the address bar | An older template without `method="post"`, whose script did not run | Recopy the template from `assets/` |
 | Button stays disabled after pressing Back | An older template without the `pageshow` handler | Recopy the template from `assets/` |
+| Button shows "Please wait..." for a minute, then "This is taking longer than expected..." | EPD did not answer within 60 seconds. The signup may still have gone through, which is why the message points to the inbox | Nothing to fix in the form. If it keeps happening, report it to the backend team |
 | Request fires, page does not move | `redirectUrl` missing from the response | The templates guard against this and show an error. Check the response body |
 | Navigates to `undefined` | An older template without the `redirectUrl` guard | Recopy the template from `assets/` |
 
@@ -21,7 +24,7 @@ Check the browser console and network tab first.
 | Field names were renamed | They must be exactly `firstName`, `lastName`, `companyName`, `email` |
 | A value is empty or whitespace | The templates trim before sending. If you edited that out, `"  "` passes the browser's `minlength` and fails server-side |
 | A `utm*` value over 100 chars | The templates truncate to 100. Do not remove that |
-| A name with an accent or non-Latin script | The server character set is ambiguous. See "Known gaps" in `api.md` and confirm with the backend team |
+| A name with a letter outside Western European Latin (`Ł`, `ř`, `ễ`, non-Latin scripts) | The server only accepts `A-Z`, `a-z`, and `À`-`ÿ`. The form shows its "can only contain letters..." message on the field. Nothing to fix in the form. See "Known gaps" in `api.md` |
 | Company name under 3 chars | `companyName` has a 3-character minimum. "3M" is rejected. Known gap, see `api.md` |
 
 Read the actual message from the response body rather than guessing: look in

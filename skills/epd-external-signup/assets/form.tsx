@@ -11,7 +11,7 @@
  * Do not rename the fields, drop the honeypot, or edit the UTM block.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
 
@@ -38,6 +38,15 @@ type SignupResponse = {
 };
 
 const FORM_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
+
+// A normal signup answers in a few seconds. This only stops a request that
+// hangs, and is long enough not to cut off a slow one that would succeed.
+const TIMEOUT_MS = 60_000;
+
+// On timeout the signup may still have gone through and emailed a code, and
+// submitting again cancels that code. Say so, rather than only "try again".
+const TIMEOUT_MESSAGE =
+  'This is taking longer than expected. Check your inbox: if a code arrived, your signup went through. If not, please try again.';
 
 // field_errors can lead with a property that is not one of the inputs (an
 // unrecognized key), so prefer the first error on a real form field.
@@ -98,6 +107,9 @@ const honeypotStyle: React.CSSProperties = {
 };
 
 export function EpdSignupForm() {
+  // Ids unique to this copy, so the form can be rendered more than once on a
+  // page (a hero and a footer) with every label pointing at its own input.
+  const id = useId();
   const [error, setError] = useState('');
   const [invalidField, setInvalidField] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
@@ -169,12 +181,17 @@ export function EpdSignupForm() {
 
     setSubmitting(true);
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     try {
       const res = await fetch(ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
 
       const data = (await res.json().catch(() => null)) as SignupResponse | null;
 
@@ -207,7 +224,10 @@ export function EpdSignupForm() {
       window.location.href = data.redirectUrl;
       // submitting stays true on purpose while the browser navigates away.
     } catch {
-      setError('Something went wrong. Please try again.');
+      clearTimeout(timer);
+      setError(
+        controller.signal.aborted ? TIMEOUT_MESSAGE : 'Something went wrong. Please try again.'
+      );
       setSubmitting(false);
     }
   }
@@ -215,11 +235,11 @@ export function EpdSignupForm() {
   return (
     // method="post" keeps visitor details out of the URL if someone submits
     // before the page's JavaScript has loaded.
-    <form onSubmit={handleSubmit} method="post" noValidate>
+    <form onSubmit={handleSubmit} method="post" noValidate aria-busy={submitting || undefined}>
       <div>
-        <label htmlFor="epd-first-name">First name</label>
+        <label htmlFor={`${id}-first-name`}>First name</label>
         <input
-          id="epd-first-name"
+          id={`${id}-first-name`}
           name="firstName"
           type="text"
           autoComplete="given-name"
@@ -232,9 +252,9 @@ export function EpdSignupForm() {
       </div>
 
       <div>
-        <label htmlFor="epd-last-name">Last name</label>
+        <label htmlFor={`${id}-last-name`}>Last name</label>
         <input
-          id="epd-last-name"
+          id={`${id}-last-name`}
           name="lastName"
           type="text"
           autoComplete="family-name"
@@ -247,9 +267,9 @@ export function EpdSignupForm() {
       </div>
 
       <div>
-        <label htmlFor="epd-company">Company name</label>
+        <label htmlFor={`${id}-company`}>Company name</label>
         <input
-          id="epd-company"
+          id={`${id}-company`}
           name="companyName"
           type="text"
           autoComplete="organization"
@@ -261,9 +281,9 @@ export function EpdSignupForm() {
       </div>
 
       <div>
-        <label htmlFor="epd-email">Work email</label>
+        <label htmlFor={`${id}-email`}>Work email</label>
         <input
-          id="epd-email"
+          id={`${id}-email`}
           name="email"
           type="email"
           autoComplete="email"
@@ -274,8 +294,8 @@ export function EpdSignupForm() {
 
       {/* Honeypot. Hidden from people, filled by bots. Do not remove. */}
       <div aria-hidden="true" style={honeypotStyle}>
-        <label htmlFor="epd-website">Website</label>
-        <input id="epd-website" name="website" type="text" tabIndex={-1} autoComplete="off" />
+        <label htmlFor={`${id}-website`}>Website</label>
+        <input id={`${id}-website`} name="website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
 
       <button type="submit" disabled={submitting}>

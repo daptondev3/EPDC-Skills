@@ -94,7 +94,10 @@ through their own Next.js (App Router) server. Save it at
 `app/api/epd-signup/route.ts`. Never create a root `app/` in a `src/app` project:
 Next.js then ignores `src/app` and the whole site breaks.
 
-If the page already has a copy of `form.html`, do not paste a second one.
+For more than one form on a page (a hero and a footer), paste `form.html` once and
+repeat only its `<form>` element where the others go. The one script sets up every
+copy and gives each its own ids. In React, render `<EpdSignupForm />` as often as
+needed.
 
 How to "copy" depends on your environment:
 
@@ -115,7 +118,9 @@ Change only these things:
 3. `ENDPOINT` in `form.tsx` - **only when you also copied `route.ts`**. Set it to
    `'/api/epd-signup'`. Its default posts straight to EPD. Pointing it at
    `/api/epd-signup` without the route makes every submit fail with a 404.
-4. Styling - the templates ship unstyled. Match the host page.
+4. Styling - the templates ship unstyled. Match the host page. The site's own
+   classes, button, and error element are fine. Keep a submit button inside the
+   form: a `<button>` that is not `type="button"`, never a link.
 
 Do not change field names, `minlength`, `maxlength`, the honeypot field, the
 form's `method="post"`, or the UTM block. Those match server-side validation and
