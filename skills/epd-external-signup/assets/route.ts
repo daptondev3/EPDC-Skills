@@ -1,13 +1,18 @@
 /**
- * EPD external signup - Next.js route handler (App Router).
+ * EPD external signup - Next.js route handler (App Router). Optional.
  *
- * Save as: app/api/epd-signup/route.ts
- * Pair with: assets/form.tsx (its ENDPOINT already points here)
+ * Use it only when signups should go through the site's own server. The form
+ * works without it, posting straight to EPD.
  *
- * Required when a partner key is in play. The key is injected here and never
- * reaches the browser. See references/partner-key.md.
+ * Save as:
+ *   app/api/epd-signup/route.ts       when the project has a root app/ folder
+ *   src/app/api/epd-signup/route.ts   when the project keeps app/ under src/
+ * Never create a root app/ folder in a src/app project: Next.js then ignores src/app.
  *
- * Change only EPD_API_BASE, and the partner key line if you have one.
+ * Pair with: assets/form.tsx, with its ENDPOINT set to '/api/epd-signup'.
+ * The partner key stays in the form's PARTNER_KEY; this route forwards it.
+ *
+ * Change only EPD_API_BASE.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,8 +38,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Rebuild the body from a whitelist. Never forward the client's object as-is:
-  // the API rejects unrecognized properties, and a client must not be able to
-  // inject a partnerKey of its own.
+  // the API rejects unrecognized properties.
   const body: Record<string, string> = {
     firstName: str(raw.firstName, 20),
     lastName: str(raw.lastName, 20),
@@ -56,9 +60,9 @@ export async function POST(req: NextRequest) {
     if (value) body[key] = value;
   }
 
-  // PARTNER KEY: uncomment and set the partner's key to enable commission credit.
-  // Prefer a server-only env var so it stays out of the repo.
-  // body.partnerKey = 'REPLACE_WITH_PARTNER_KEY';
+  // Partner key, set in the form's PARTNER_KEY. Forwarded when present.
+  const partnerKey = str(raw.partnerKey, 100);
+  if (partnerKey) body.partnerKey = partnerKey;
 
   // EPD rate limits 60 requests per hour per IP. Without this header every
   // visitor shares your server's single IP and the whole site stops at 60 an
@@ -85,8 +89,13 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json().catch(() => null);
 
-    // Pass EPD's status through so the client can branch on 400 and 429.
-    return NextResponse.json(data ?? { success: res.ok }, { status: res.status });
+    // Pass EPD's status through so the client can branch on 400 and 429, and
+    // Retry-After so a 429 can tell the visitor how long to wait.
+    const retryAfter = res.headers.get('retry-after');
+    return NextResponse.json(data ?? { success: res.ok }, {
+      status: res.status,
+      headers: retryAfter ? { 'Retry-After': retryAfter } : undefined,
+    });
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError';
     return NextResponse.json(

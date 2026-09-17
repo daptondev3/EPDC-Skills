@@ -42,14 +42,15 @@ lookup. You never call the prefill endpoint yourself.
 
 ## POST /v1/external-signup
 
-Rate limited to **60 requests per hour per IP**. Over that returns `429`.
+Rate limited to **60 requests per hour per IP** and **5 requests per hour per
+email**. Over either returns `429`.
 
 ### Request body (JSON)
 
 | Field | Required | Rules |
 | --- | --- | --- |
 | `email` | yes | valid email address |
-| `firstName` | yes | 2-20 chars, letters, spaces, periods, hyphens, apostrophes, no HTML |
+| `firstName` | yes | 2-20 chars, letters, spaces, periods, hyphens, straight apostrophes (`'`, not `’`), no HTML. The templates convert curly apostrophes before sending |
 | `lastName` | yes | 2-20 chars, same character set as `firstName`, no HTML |
 | `companyName` | yes | 3-150 chars, no HTML |
 | `partnerKey` | no | string, max 100 chars, no HTML. See `partner-key.md` |
@@ -148,8 +149,24 @@ The templates do exactly this in `readError`.
 
 ### Response 429 - rate limited
 
-More than 60 requests in an hour from that IP. Show a "try again shortly" message.
-See `troubleshooting.md` for what this means when you call from a server.
+Same `error` envelope, no `field_errors`. Two limits can trigger it:
+
+| Limit | `error.message` | `Retry-After` header |
+| --- | --- | --- |
+| 60 per hour per IP | `ThrottlerException: Too Many Requests` | yes, in seconds |
+| 5 per hour per email | `Too many signup attempts for this email. Please try again later.` | not sent |
+
+The templates show `error.message` and, when `Retry-After` is readable, add
+"You can try again in N minutes." (seconds rounded up to whole minutes; an HTTP
+date also works).
+
+`Retry-After` is not a CORS-safelisted header. A browser calling EPD directly can
+only read it if EPD's CORS sends `Access-Control-Expose-Headers: Retry-After`.
+Until it does, `form.html` and `form.tsx` show the message without the wait time.
+`route.ts` reads the header server-side and passes it on, so a form posting
+through it always gets it.
+
+See `troubleshooting.md` for what the IP limit means when you call from a server.
 
 ### Response 5xx
 
@@ -165,10 +182,12 @@ change.
 | --- | --- | --- |
 | Setup | just paste the form | needs a route handler |
 | Rate limit applies to | each visitor's IP | **your server's single IP** |
-| Partner key | unsafe, readable in page source | safe, never reaches the browser |
+| Partner key | in the form's `PARTNER_KEY` | in the form's `PARTNER_KEY`, forwarded |
+| `Retry-After` on 429 | only if EPD exposes it via CORS | always |
 | Bot filtering | honeypot only | anything you want |
 
-Use server-side whenever a partner key is involved. See `partner-key.md`.
+Client-side is the default. The partner key is not a secret, so it does not need a
+server. See `partner-key.md`.
 
 The 60/hr per-IP limit is the trap in the server-side path: every visitor shares
 your server's IP, so the whole site stops at 60 signups an hour. `assets/route.ts`

@@ -6,7 +6,10 @@ Check the browser console and network tab first.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| No network request at all | The submit handler never ran, or a validation attribute is blocking | Confirm the form's `id` matches the one the script looks up. Check for a JS error earlier on the page |
+| No network request at all | The submit handler never ran, or a validation attribute is blocking | Confirm the `<form>` still has `data-epd-signup` and the script is on the page. Check for a JS error earlier on the page |
+| Page reloads, nothing is created | The script was stripped (some site builders remove `<script>`), so the browser submitted the form itself | Put the form in a block that allows scripts, e.g. WordPress **Custom HTML** as an Administrator. `method="post"` keeps the details out of the URL meanwhile |
+| Visitor's name and email appear in the address bar | An older template without `method="post"`, whose script did not run | Recopy the template from `assets/` |
+| Button stays disabled after pressing Back | An older template without the `pageshow` handler | Recopy the template from `assets/` |
 | Request fires, page does not move | `redirectUrl` missing from the response | The templates guard against this and show an error. Check the response body |
 | Navigates to `undefined` | An older template without the `redirectUrl` guard | Recopy the template from `assets/` |
 
@@ -29,6 +32,17 @@ in `api.md`.
 If the form only ever shows "Please check your details and try again." for
 rejected input, it was generated from an older template that read
 `field_errors[0].messages[0]`, which EPD never returns. Recopy it from `assets/`.
+
+## 429 message has no wait time
+
+The form adds "You can try again in N minutes." only when it can read the
+`Retry-After` header:
+
+- **Form posts straight to EPD:** the browser hides `Retry-After` unless EPD's CORS
+  sends `Access-Control-Expose-Headers: Retry-After`. Ask the backend team to add it.
+- **The per-email limit (5 per hour):** EPD does not send `Retry-After` for it.
+- **Posting through `route.ts`:** an older `route.ts` did not pass the header on.
+  Recopy it from `assets/`.
 
 ## 429 after very few signups
 
@@ -66,6 +80,15 @@ side. Report it to the backend team with the email address used.
   OTP by design and redirects to login instead.
 - Otherwise it is an EPD-side delivery issue. The POST succeeding means the lead
   was saved.
+
+## Signups are not credited to the partner
+
+- `PARTNER_KEY` is still `''`, or holds the portal label ("API Key - Authorization: ...")
+  instead of the bare key. Run `scripts/verify.mjs`.
+- The key is read from an environment variable that is not set, or not exposed to
+  the browser. Put the key in `PARTNER_KEY` as a string.
+- The key was typed with a mistake. EPD does not check it, so a wrong key is
+  accepted silently. Copy it from the portal again.
 
 ## Everything works in dev, nothing works in production
 

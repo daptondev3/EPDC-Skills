@@ -35,7 +35,7 @@ even if the user did not mention partners.
 
 > Are you registered as a partner with Easy Pay Direct?
 >
-> A partner key credits signup commission to you on every account this form creates.
+> A partner key credits you for every signup this form sends.
 >
 > - **Yes** - paste your partner key.
 > - **No** - you can register at https://emap.epd.dev/signup/partner.
@@ -54,26 +54,27 @@ Then act on the answer:
 
 | Answer | Do this |
 | --- | --- |
-| Pastes a key | Read `references/partner-key.md`. Use the server-side template (Step 2 row 1). Confirm the key is wired in |
+| Pastes a key | Put it in `PARTNER_KEY` in whichever template Step 2 picks (Step 3). Use only the key value, never the "API Key - Authorization:" label. Confirm it is set |
 | Registered, key not to hand | Give them the steps: log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:**. Offer to build without it now and add it later |
 | Not registered | Give them https://emap.epd.dev/signup/partner, and tell them that once registered the key is under **Integration** → **API Integration** → **API Documentation**. **Do not block on this.** Offer to build without it now and add it later |
 | Skip, or no clear answer | Build without it. Change nothing in the template. This is the common case and is completely safe |
 
 Never block the build waiting for a partner key. Registering takes time the user
 may not want to spend right now, and the key can be added to a finished form in
-one line later. See "Adding a key later" in `references/partner-key.md`.
+one line later: set `PARTNER_KEY`. See `references/partner-key.md`.
 
 Ask this once. If the user already answered it earlier in the conversation, do
 not ask again.
 
-Never put a partner key in a form field, a hidden input, or any file that reaches
-the browser. It is a commission credential. Anyone who can read it can steal the
-commission.
+The partner key is not a secret. It goes in the form's `PARTNER_KEY` constant as a
+plain string, whatever the site is built with. Never read it from an environment
+variable (a missing one silently drops the key) and never make it a form field
+(the body is built from named fields, so it would not be sent).
 
 After generating, state plainly which happened:
 
-- "Wired in partner key `<key>` server-side. It never reaches the browser."
-- "Built without a partner key. To add one later, see `references/partner-key.md`."
+- "Added your partner key `<key>` to the form. Every signup it sends is credited to you."
+- "Built without a partner key. To add one later, set `PARTNER_KEY` in the form."
 
 ## Step 2 - Pick a template
 
@@ -81,10 +82,19 @@ Check the rows in order. The first match wins.
 
 | Situation | Copy |
 | --- | --- |
-| User gave a partner key | `assets/route.ts` **and** `assets/form.tsx` |
-| React or Next.js, no partner key | `assets/form.tsx`, with `ENDPOINT` changed (Step 3) |
-| Plain HTML site, no build step | `assets/form.html` |
+| React or Next.js | `assets/form.tsx` |
+| Plain HTML site, WordPress, Webflow, or any site builder | `assets/form.html` |
 | Stack unclear | `assets/form.html` |
+
+A partner key does not change the template. Both forms hold it.
+
+Copy `assets/route.ts` as well **only** when the user asks for signups to go
+through their own Next.js (App Router) server. Save it at
+`src/app/api/epd-signup/route.ts` if the project has `src/app`, otherwise at
+`app/api/epd-signup/route.ts`. Never create a root `app/` in a `src/app` project:
+Next.js then ignores `src/app` and the whole site breaks.
+
+If the page already has a copy of `form.html`, do not paste a second one.
 
 How to "copy" depends on your environment:
 
@@ -101,15 +111,15 @@ How to "copy" depends on your environment:
 Change only these things:
 
 1. `EPD_API_BASE` - leave the default unless the user named an environment.
-2. `ENDPOINT` in `form.tsx` - **only when you did not copy `route.ts`**. Set it to
-   `` `${EPD_API_BASE}/v1/external-signup` ``. Its default, `/api/epd-signup`, is
-   the route handler in `route.ts`. Without that file every submit fails with a
-   404. When you did copy `route.ts`, leave `ENDPOINT` as it is.
-3. Styling - the templates ship unstyled. Match the host page.
+2. `PARTNER_KEY` - the user's key as a string, when they gave one. Otherwise leave `''`.
+3. `ENDPOINT` in `form.tsx` - **only when you also copied `route.ts`**. Set it to
+   `'/api/epd-signup'`. Its default posts straight to EPD. Pointing it at
+   `/api/epd-signup` without the route makes every submit fail with a 404.
+4. Styling - the templates ship unstyled. Match the host page.
 
-Do not change field names, `minlength`, `maxlength`, the honeypot field, or the
-UTM block. Those match server-side validation and attribution. Changing them
-causes 400s or lost attribution.
+Do not change field names, `minlength`, `maxlength`, the honeypot field, the
+form's `method="post"`, or the UTM block. Those match server-side validation and
+attribution. Changing them causes 400s or lost attribution.
 
 ## Base URL
 
@@ -143,8 +153,8 @@ If you can run Node, run this on each generated file:
 node <path-to-this-skill>/scripts/verify.mjs <path-to-generated-file>
 ```
 
-It checks field names, validation attributes, the UTM block, and that no partner
-key leaked into client code. Fix anything it reports before telling the user you
+It checks field names, validation attributes, the UTM block, error and rate-limit
+handling, and that the partner key is set as a plain string. Fix anything it reports before telling the user you
 are done.
 
 If you cannot run commands, check these yourself instead:
@@ -155,8 +165,10 @@ If you cannot run commands, check these yourself instead:
 - All five `utm_*` params are read, each omitted when the URL has no value, with
   no hardcoded fallbacks
 - The code checks `redirectUrl` exists before navigating to it
-- `form.tsx` without `route.ts`: `ENDPOINT` is EPD's URL, not `/api/epd-signup`
-- No partner key appears in any file that reaches the browser
+- `form.tsx` points `ENDPOINT` at `/api/epd-signup` only when `route.ts` was copied
+- `PARTNER_KEY` is the bare key as a string (or `''`), not an env var or a form field
+- The `<form>` keeps `method="post"`
+- A 429 shows EPD's message and reads the `Retry-After` header
 - `EPD_API_BASE` is a hardcoded `https://` string, not an env var
 
 ## More detail
@@ -165,5 +177,5 @@ Read these only when you need them:
 
 - Request and response contract, validation rules, error shapes, rate limits ->
   `references/api.md`
-- Partner key wiring and commission safety -> `references/partner-key.md`
+- Partner key wiring -> `references/partner-key.md`
 - Form submits but nothing happens, CORS errors, 400s -> `references/troubleshooting.md`

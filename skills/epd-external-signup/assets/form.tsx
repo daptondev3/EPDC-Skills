@@ -4,29 +4,28 @@
  * EPD external signup form - React / Next.js client component.
  *
  * Copy this file as-is. Change only:
- *   1. ENDPOINT, only when you are not also copying route.ts (see below)
- *   2. the styling, to match the host page
+ *   1. PARTNER_KEY, if the user gave one. See references/partner-key.md.
+ *   2. ENDPOINT, only when you are also copying route.ts (see below)
+ *   3. the styling, to match the host page
  *
  * Do not rename the fields, drop the honeypot, or edit the UTM block.
- * Never put a partnerKey in this file. It reaches the browser.
- * See references/partner-key.md.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
 
+// Your EasyPayDirect partner key, e.g. 'pk_abc123'. Leave '' for no key.
+// A plain string, not an env var: a missing env var silently drops the key.
+const PARTNER_KEY = '';
+
 /**
- * Where this form posts.
+ * Where this form posts. By default, straight to EPD.
  *
- * Default is your own route handler (assets/route.ts), which is required when a
- * partner key is in play and recommended otherwise.
- *
- * No route handler and no partner key? You must change this to:
- *   const ENDPOINT = `${EPD_API_BASE}/v1/external-signup`;
- * Left as '/api/epd-signup' with no route handler, every submit 404s.
+ * Only if you also copied assets/route.ts, change this to:
+ *   const ENDPOINT = '/api/epd-signup';
  */
-const ENDPOINT = '/api/epd-signup';
+const ENDPOINT = `${EPD_API_BASE}/v1/external-signup`;
 
 type FieldError = { field?: string; code?: string; message?: string };
 type SignupResponse = {
@@ -53,6 +52,25 @@ function readError(data: SignupResponse | null): { message: string; field?: stri
   };
 }
 
+// 429: EPD's own message, plus how long to wait from the Retry-After header
+// (seconds, or an HTTP date). A cross-origin response only exposes that header
+// when EPD's CORS allows it; without it the message goes out on its own.
+function rateLimitMessage(data: SignupResponse | null, res: Response): string {
+  let message =
+    data?.error?.message ?? data?.message ?? 'Too many attempts. Please try again later.';
+
+  const header = (res.headers.get('Retry-After') ?? '').trim();
+  const seconds = /^\d+$/.test(header)
+    ? Number(header)
+    : (Date.parse(header) - Date.now()) / 1000;
+  if (seconds > 0) {
+    const minutes = Math.ceil(seconds / 60);
+    if (!/[.!?]$/.test(message)) message += '.';
+    message += ` You can try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+  }
+  return message;
+}
+
 function text(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
@@ -63,12 +81,30 @@ export function EpdSignupForm() {
   const [invalidField, setInvalidField] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
+  // Back button after the redirect restores this page from the browser's cache
+  // with the button still disabled. Turn it back on.
+  useEffect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted) setSubmitting(false);
+    }
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setInvalidField(undefined);
 
     const form = event.currentTarget;
+
+    // iPhone and Mac type a curly apostrophe (O’Brien) by default. The API only
+    // accepts a straight one, so swap it before validating.
+    for (const name of ['firstName', 'lastName']) {
+      const input = form.elements.namedItem(name) as HTMLInputElement;
+      input.value = input.value.replace(/[\u2018\u2019\u02BC]/g, "'");
+    }
+
     const formData = new FormData(form);
 
     // Honeypot tripped. Act like it worked and send nothing.
@@ -88,6 +124,8 @@ export function EpdSignupForm() {
       companyName: text(formData, 'companyName'),
       email: text(formData, 'email'),
     };
+
+    if (PARTNER_KEY.trim()) body.partnerKey = PARTNER_KEY.trim();
 
     // UTM attribution. Read-only: never written back to the URL or history,
     // never a form field. Each value is sent only when the page URL carries it.
@@ -114,13 +152,13 @@ export function EpdSignupForm() {
         body: JSON.stringify(body),
       });
 
+      const data = (await res.json().catch(() => null)) as SignupResponse | null;
+
       if (res.status === 429) {
-        setError('Too many attempts. Please try again in a little while.');
+        setError(rateLimitMessage(data, res));
         setSubmitting(false);
         return;
       }
-
-      const data = (await res.json().catch(() => null)) as SignupResponse | null;
 
       if (!res.ok) {
         const apiError = readError(data);
@@ -151,7 +189,9 @@ export function EpdSignupForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    // method="post" keeps visitor details out of the URL if someone submits
+    // before the page's JavaScript has loaded.
+    <form onSubmit={handleSubmit} method="post" noValidate>
       <div>
         <label htmlFor="epd-first-name">First name</label>
         <input

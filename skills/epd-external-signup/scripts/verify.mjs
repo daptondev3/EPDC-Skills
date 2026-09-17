@@ -68,6 +68,42 @@ const checks = [
     },
   },
   {
+    // iOS and macOS smart punctuation types ’. The API rejects it, and so does
+    // the name pattern, which blocks the submit with no useful message.
+    name: 'curly apostrophes in names are converted',
+    applies: (src) => /name=["']firstName["']/.test(src),
+    run: (src) =>
+      /\\u2019/.test(src) ? null : "the ’ to ' conversion for firstName/lastName was removed",
+  },
+  {
+    // Without method="post", a form whose script was stripped (or a copy the
+    // script never set up) falls back to a GET with the visitor's details in the URL.
+    name: 'form posts, never GETs',
+    applies: (src) => /<form/i.test(src),
+    run: (src) =>
+      /<form[^>]*\smethod=["']post["']/i.test(src)
+        ? null
+        : 'the <form> lost method="post"; if the script does not run, details land in the URL',
+  },
+  {
+    // form.html used to look itself up by id, so a second copy on the page was
+    // never set up and submitted natively.
+    name: 'every copy of the form is set up',
+    applies: (src) => /<script/i.test(src) && /<form/i.test(src),
+    run: (src) =>
+      /getElementById\(\s*['"]epd-signup['"]\s*\)/.test(src)
+        ? 'the script finds the form by id, so a second copy on the page is never set up'
+        : null,
+  },
+  {
+    // Back button after the redirect restores the page from cache with the
+    // submit button still disabled.
+    name: 'submit button re-enabled on back navigation',
+    applies: (src) => /disabled/.test(src) && /redirectUrl/.test(src),
+    run: (src) =>
+      /pageshow/.test(src) ? null : 'no pageshow handler; the button stays disabled after Back',
+  },
+  {
     name: 'honeypot field present',
     applies: (src) => /<form/i.test(src),
     run: (src) => (/name=["']website["']/.test(src) ? null : 'honeypot field was removed'),
@@ -136,15 +172,27 @@ const checks = [
         : 'navigating to redirectUrl without checking it exists',
   },
   {
-    // form.tsx ships posting to its own route handler. Copied without route.ts,
-    // every submit 404s.
+    // form.tsx can post to its own route handler. Pointed there without
+    // route.ts, every submit 404s. Anchored to the line start so the example in
+    // the doc comment does not count.
     name: 'ENDPOINT has a route handler behind it',
-    applies: (src) => /const ENDPOINT\s*=\s*['"]\/api\/epd-signup['"]/.test(src),
-    run: (src, file) =>
+    applies: (src) => /^const ENDPOINT\s*=\s*['"]\/api\/epd-signup['"]/m.test(src),
+    run: (_src, file) =>
       hasRouteHandler(file)
         ? null
         : "ENDPOINT is '/api/epd-signup' but no route handler was found. Copy assets/route.ts " +
-          'to app/api/epd-signup/route.ts, or set ENDPOINT to `${EPD_API_BASE}/v1/external-signup`',
+          'to app/api/epd-signup/route.ts (src/app/api/epd-signup/route.ts in a src/app project), ' +
+          'or set ENDPOINT back to `${EPD_API_BASE}/v1/external-signup`',
+  },
+  {
+    // A 429 should tell the visitor how long to wait. route.ts has to pass the
+    // header on, or the form never sees it.
+    name: 'rate limit reads Retry-After',
+    applies: (src) => /429/.test(src),
+    run: (src) =>
+      /headers\.get\(\s*['"]retry-after['"]\s*\)/i.test(src)
+        ? null
+        : 'a 429 is handled without Retry-After, so the visitor is not told how long to wait',
   },
   {
     // EPD returns { error: { field_errors: [{ field, message }] } }. Reading a
@@ -164,19 +212,32 @@ const checks = [
     },
   },
   {
-    name: 'no partner key in client-side code',
-    applies: (src) => !/from ['"]next\/server['"]/.test(src),
-    run: (src) =>
-      /partnerKey\s*[:=]\s*['"`]/.test(src)
-        ? 'partner key found in a file that reaches the browser - move it to route.ts'
-        : null,
+    // The key is public, so it lives in the form as a plain string. An env var
+    // that is missing (or not exposed to the browser) silently drops it.
+    name: 'partner key is a plain string',
+    applies: (src) => /PARTNER_KEY|partnerKey/.test(src),
+    run: (src) => {
+      if (/(PARTNER_KEY|partnerKey)\s*[:=][^\n;]*process\.env/.test(src)) {
+        return 'partner key read from process.env; set PARTNER_KEY to the key as a string';
+      }
+      const value = src.match(/const PARTNER_KEY\s*=\s*['"]([^'"]*)['"]/);
+      if (/const PARTNER_KEY/.test(src) && !value) {
+        return 'PARTNER_KEY must be a quoted string, or \'\' for no key';
+      }
+      if (value && /authorization|replace|\s|:/i.test(value[1])) {
+        return `PARTNER_KEY "${value[1]}" is not a bare key; paste only the value after "API Key - Authorization:"`;
+      }
+      return null;
+    },
   },
   {
+    // The body is built from named fields, so an input called partnerKey is
+    // never sent and the commission is silently lost.
     name: 'partner key is not a form field',
     applies: () => true,
     run: (src) =>
       /name=["']partnerKey["']/.test(src)
-        ? 'partnerKey must never be an input, hidden or otherwise'
+        ? 'partnerKey as an input is never sent; set PARTNER_KEY in the script instead'
         : null,
   },
   {

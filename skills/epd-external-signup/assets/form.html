@@ -3,10 +3,10 @@
 
   Copy this file as-is. Change only:
     1. EPD_API_BASE, if the user named an environment other than dev
-    2. the styles, to match the host page
+    2. PARTNER_KEY, if the user gave one. See references/partner-key.md.
+    3. the styles, to match the host page
 
   Do not rename the fields, drop the honeypot, or edit the UTM block.
-  Never add a partnerKey here. See references/partner-key.md.
 -->
 
 <style>
@@ -15,10 +15,14 @@
   .epd-field input { display: block; width: 100%; padding: 0.5rem; }
   .epd-field input[aria-invalid='true'] { border-color: #c00; }
   .epd-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-  #epd-error { color: #c00; min-height: 1.25rem; }
+  .epd-error { color: #c00; min-height: 1.25rem; }
 </style>
 
-<form id="epd-signup" novalidate>
+<!--
+  method="post" keeps visitor details out of the URL if the script below is
+  stripped or never runs. data-epd-signup is how the script finds the form.
+-->
+<form data-epd-signup method="post" novalidate>
   <div class="epd-field">
     <label for="epd-first-name">First name</label>
     <input
@@ -72,39 +76,22 @@
   </div>
 
   <button type="submit">Next</button>
-  <p id="epd-error" role="alert"></p>
+  <p class="epd-error" role="alert"></p>
 </form>
 
 <script>
   (function () {
     const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
 
-    const form = document.getElementById('epd-signup');
-    const errorEl = document.getElementById('epd-error');
-    const button = form.querySelector('button[type="submit"]');
+    // Your EasyPayDirect partner key, e.g. 'pk_abc123'. Leave '' for no key.
+    // Paste the value only, not the "API Key - Authorization:" label.
+    const PARTNER_KEY = '';
 
-    function clearErrors() {
-      errorEl.textContent = '';
-      for (const el of form.querySelectorAll('[aria-invalid]')) {
-        el.removeAttribute('aria-invalid');
-      }
-    }
-
-    function showError(message, field) {
-      errorEl.textContent = message;
-      if (!field) return;
-      const input = form.querySelector('[name="' + field + '"]');
-      if (input) {
-        input.setAttribute('aria-invalid', 'true');
-        input.focus();
-      }
-    }
+    const FORM_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
 
     // EPD errors look like { error: { message, field_errors: [{ field, message }] } }.
     // field_errors can lead with a property that is not one of the inputs (an
     // unrecognized key), so prefer the first error on a real form field.
-    const FORM_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
-
     function readError(data) {
       const apiError = (data && data.error) || {};
       const fieldError = (apiError.field_errors || []).find(function (e) {
@@ -119,94 +106,162 @@
       };
     }
 
+    // 429: EPD's own message, plus how long to wait from the Retry-After header
+    // (seconds, or an HTTP date). The browser can only read that header when
+    // EPD's CORS exposes it; without it the message goes out on its own.
+    function rateLimitMessage(data, res) {
+      const apiError = (data && data.error) || {};
+      let message =
+        apiError.message ||
+        (data && data.message) ||
+        'Too many attempts. Please try again later.';
+
+      const header = (res.headers.get('Retry-After') || '').trim();
+      const seconds = /^\d+$/.test(header)
+        ? Number(header)
+        : (Date.parse(header) - Date.now()) / 1000;
+      if (seconds > 0) {
+        const minutes = Math.ceil(seconds / 60);
+        if (!/[.!?]$/.test(message)) message += '.';
+        message +=
+          ' You can try again in ' + minutes + (minutes === 1 ? ' minute.' : ' minutes.');
+      }
+      return message;
+    }
+
     function text(formData, key) {
       const value = formData.get(key);
       return typeof value === 'string' ? value.trim() : '';
     }
 
-    form.addEventListener('submit', async function (event) {
-      event.preventDefault();
-      clearErrors();
+    // Sets up every signup form on the page that is not set up yet, so a
+    // second copy of this file on the same page still works.
+    function setUp(form) {
+      form.setAttribute('data-epd-ready', '');
 
-      const formData = new FormData(form);
+      const errorEl = form.querySelector('[role="alert"]');
+      const button = form.querySelector('button[type="submit"]');
 
-      // Honeypot tripped. Act like it worked and send nothing.
-      if (text(formData, 'website')) return;
-
-      if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
+      function clearErrors() {
+        errorEl.textContent = '';
+        for (const el of form.querySelectorAll('[aria-invalid]')) {
+          el.removeAttribute('aria-invalid');
+        }
       }
 
-      // Build the body from named fields only. Never spread the whole FormData:
-      // hidden inputs the host page already had would leak in as unrecognized
-      // keys and the API would reject the request.
-      const body = {
-        firstName: text(formData, 'firstName'),
-        lastName: text(formData, 'lastName'),
-        companyName: text(formData, 'companyName'),
-        email: text(formData, 'email'),
-      };
-
-      // UTM attribution. Read-only: never written back to the URL or history,
-      // never a form field. Each value is sent only when the page URL carries
-      // it. No defaults: a param the URL does not carry is not sent.
-      const params = new URLSearchParams(window.location.search);
-      const utm = function (param) {
-        return (params.get(param) || '').trim().slice(0, 100);
-      };
-      for (const pair of [
-        ['utmSource', 'utm_source'],
-        ['utmMedium', 'utm_medium'],
-        ['utmCampaign', 'utm_campaign'],
-        ['utmTerm', 'utm_term'],
-        ['utmContent', 'utm_content'],
-      ]) {
-        const value = utm(pair[1]);
-        if (value) body[pair[0]] = value;
+      function showError(message, field) {
+        errorEl.textContent = message;
+        if (!field) return;
+        const input = form.querySelector('[name="' + field + '"]');
+        if (input) {
+          input.setAttribute('aria-invalid', 'true');
+          input.focus();
+        }
       }
 
-      button.disabled = true;
+      // Back button after the redirect restores this page from the browser's
+      // cache with the button still disabled. Turn it back on.
+      window.addEventListener('pageshow', function (event) {
+        if (event.persisted) button.disabled = false;
+      });
 
-      try {
-        const res = await fetch(EPD_API_BASE + '/v1/external-signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        clearErrors();
 
-        if (res.status === 429) {
-          showError('Too many attempts. Please try again in a little while.');
-          button.disabled = false;
+        // iPhone and Mac type a curly apostrophe (O’Brien) by default. The API
+        // only accepts a straight one, so swap it before validating.
+        for (const name of ['firstName', 'lastName']) {
+          const input = form.elements.namedItem(name);
+          input.value = input.value.replace(/[\u2018\u2019\u02BC]/g, "'");
+        }
+
+        const formData = new FormData(form);
+
+        // Honeypot tripped. Act like it worked and send nothing.
+        if (text(formData, 'website')) return;
+
+        if (!form.checkValidity()) {
+          form.reportValidity();
           return;
         }
 
-        const data = await res.json().catch(function () {
-          return null;
-        });
+        // Build the body from named fields only. Never spread the whole FormData:
+        // hidden inputs the host page already had would leak in as unrecognized
+        // keys and the API would reject the request.
+        const body = {
+          firstName: text(formData, 'firstName'),
+          lastName: text(formData, 'lastName'),
+          companyName: text(formData, 'companyName'),
+          email: text(formData, 'email'),
+        };
 
-        if (!res.ok) {
-          const apiError = readError(data);
-          showError(apiError.message, apiError.field);
-          button.disabled = false;
-          return;
+        if (PARTNER_KEY.trim()) body.partnerKey = PARTNER_KEY.trim();
+
+        // UTM attribution. Read-only: never written back to the URL or history,
+        // never a form field. Each value is sent only when the page URL carries
+        // it. No defaults: a param the URL does not carry is not sent.
+        const params = new URLSearchParams(window.location.search);
+        const utm = function (param) {
+          return (params.get(param) || '').trim().slice(0, 100);
+        };
+        for (const pair of [
+          ['utmSource', 'utm_source'],
+          ['utmMedium', 'utm_medium'],
+          ['utmCampaign', 'utm_campaign'],
+          ['utmTerm', 'utm_term'],
+          ['utmContent', 'utm_content'],
+        ]) {
+          const value = utm(pair[1]);
+          if (value) body[pair[0]] = value;
         }
 
-        if (!data || !data.redirectUrl) {
+        button.disabled = true;
+
+        try {
+          const res = await fetch(EPD_API_BASE + '/v1/external-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+
+          const data = await res.json().catch(function () {
+            return null;
+          });
+
+          if (res.status === 429) {
+            showError(rateLimitMessage(data, res));
+            button.disabled = false;
+            return;
+          }
+
+          if (!res.ok) {
+            const apiError = readError(data);
+            showError(apiError.message, apiError.field);
+            button.disabled = false;
+            return;
+          }
+
+          if (!data || !data.redirectUrl) {
+            showError('Something went wrong. Please try again.');
+            button.disabled = false;
+            return;
+          }
+
+          // Works for both branches: a new lead goes to the OTP step, an existing
+          // account goes to login. data.alreadyRegistered tells you which, if you
+          // want to show a message before redirecting.
+          window.location.href = data.redirectUrl;
+          // Button stays disabled on purpose while the browser navigates away.
+        } catch (err) {
           showError('Something went wrong. Please try again.');
           button.disabled = false;
-          return;
         }
+      });
+    }
 
-        // Works for both branches: a new lead goes to the OTP step, an existing
-        // account goes to login. data.alreadyRegistered tells you which, if you
-        // want to show a message before redirecting.
-        window.location.href = data.redirectUrl;
-        // Button stays disabled on purpose while the browser navigates away.
-      } catch (err) {
-        showError('Something went wrong. Please try again.');
-        button.disabled = false;
-      }
-    });
+    for (const form of document.querySelectorAll('form[data-epd-signup]:not([data-epd-ready])')) {
+      setUp(form);
+    }
   })();
 </script>

@@ -4,7 +4,7 @@ This skill is for anyone who wants a signup form on a page **they control** - a 
 partner landing page, or marketing microsite, that captures leads for EPD Commerce. Give it to your AI agent and it builds a first-touch signup form
 (first name, last name, company, email) that creates a lead in EasyPayDirect, then hands the
 visitor to EPD Commerce to finish account creation with email OTP and a password. Registered
-EasyPayDirect partners can wire in their partner key so every signup the form drives is
+EasyPayDirect partners can add their partner key so every signup the form drives is
 attributed to them for commission.
 
 Every generated form also forwards UTM attribution (`utm_source`, `utm_medium`,
@@ -73,23 +73,22 @@ backend.
 
 ## The Partner Key
 
-A partner key credits signup commission to you on every account the form creates.
+A partner key credits you for every signup the form sends.
 It is optional. The skill asks about it first, and there are three ways to answer:
 
 | You are | What happens |
 | --- | --- |
-| A registered Easy Pay Direct partner | Paste your key and it gets wired in server-side. To find it: log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:** |
+| A registered Easy Pay Direct partner | Paste your key and it goes into the form. To find it: log in at https://emap.epd.dev → **Integration** → **API Integration** → **API Documentation** → copy the value shown after **API Key - Authorization:** |
 | Not registered | You get a link to register at https://emap.epd.dev/signup/partner - but the build does not wait for you |
 | Not interested | Skip it. The form works exactly the same, no commission is credited |
 
-Skipping is safe and reversible. You can add a key to a finished form later; see
-[`references/partner-key.md`](skills/epd-external-signup/references/partner-key.md#adding-a-key-later)
-for how much work that is on each template.
+Skipping is safe. You can add a key to a finished form later by setting
+`PARTNER_KEY` in it; see
+[`references/partner-key.md`](skills/epd-external-signup/references/partner-key.md#adding-a-key-later).
+Signups sent before that aren't credited.
 
-If you do provide a key, **the skill uses the server-side template**. That is not
-a preference. The API has no signature or origin check on the key, so anyone who
-can view-source a page containing it can farm signups against your commission
-account. The server-side route keeps it out of the browser entirely.
+The key works the same on every kind of site (WordPress, Webflow, plain HTML,
+React, Next.js). It isn't a secret, so it sits in the form itself.
 
 ## Folder Structure
 
@@ -98,12 +97,12 @@ skills/epd-external-signup/
 ├── SKILL.md                     entry point - decisions and routing only
 ├── references/                  the agent reads these on demand
 │   ├── api.md                   request/response contract, validation, rate limits
-│   ├── partner-key.md           commission wiring and why it must stay server-side
+│   ├── partner-key.md           partner key wiring
 │   └── troubleshooting.md       symptom -> cause -> fix
 ├── assets/                      the agent copies these; it does not retype them
 │   ├── form.html                plain HTML + vanilla JS, no build step
 │   ├── form.tsx                 React / Next.js client component
-│   └── route.ts                 Next.js route handler (required for partner keys)
+│   └── route.ts                 optional Next.js route handler, to submit via your server
 └── scripts/
     └── verify.mjs               checks a generated file before you ship it
 ```
