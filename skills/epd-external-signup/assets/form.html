@@ -100,6 +100,25 @@
       }
     }
 
+    // EPD errors look like { error: { message, field_errors: [{ field, message }] } }.
+    // field_errors can lead with a property that is not one of the inputs (an
+    // unrecognized key), so prefer the first error on a real form field.
+    const FORM_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
+
+    function readError(data) {
+      const apiError = (data && data.error) || {};
+      const fieldError = (apiError.field_errors || []).find(function (e) {
+        return e && FORM_FIELDS.indexOf(e.field) !== -1 && e.message;
+      });
+      if (fieldError) return { message: fieldError.message, field: fieldError.field };
+      return {
+        message:
+          apiError.message ||
+          (data && data.message) ||
+          'Please check your details and try again.',
+      };
+    }
+
     function text(formData, key) {
       const value = formData.get(key);
       return typeof value === 'string' ? value.trim() : '';
@@ -131,8 +150,7 @@
 
       // UTM attribution. Read-only: never written back to the URL or history,
       // never a form field. Each value is sent only when the page URL carries
-      // it. No defaults: a bare link produces a signup with no UTM data rather
-      // than invented attribution.
+      // it. No defaults: a param the URL does not carry is not sent.
       const params = new URLSearchParams(window.location.search);
       const utm = function (param) {
         return (params.get(param) || '').trim().slice(0, 100);
@@ -168,12 +186,8 @@
         });
 
         if (!res.ok) {
-          const fieldError = data && data.field_errors && data.field_errors[0];
-          showError(
-            (fieldError && fieldError.messages && fieldError.messages[0]) ||
-              'Please check your details and try again.',
-            fieldError && fieldError.field
-          );
+          const apiError = readError(data);
+          showError(apiError.message, apiError.field);
           button.disabled = false;
           return;
         }

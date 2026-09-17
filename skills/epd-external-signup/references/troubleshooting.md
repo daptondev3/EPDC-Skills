@@ -21,7 +21,14 @@ Check the browser console and network tab first.
 | A name with an accent or non-Latin script | The server character set is ambiguous. See "Known gaps" in `api.md` and confirm with the backend team |
 | Company name under 3 chars | `companyName` has a 3-character minimum. "3M" is rejected. Known gap, see `api.md` |
 
-Read the actual message from `field_errors[0].messages[0]` rather than guessing.
+Read the actual message from the response body rather than guessing: look in
+`error.field_errors[]` for the entry whose `field` is one of the four inputs and
+read its `message`. `error.message` summarises every failure. See "Response 400"
+in `api.md`.
+
+If the form only ever shows "Please check your details and try again." for
+rejected input, it was generated from an older template that read
+`field_errors[0].messages[0]`, which EPD never returns. Recopy it from `assets/`.
 
 ## 429 after very few signups
 

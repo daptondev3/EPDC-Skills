@@ -116,18 +116,35 @@ regardless, since nothing is created.
 
 ### Response 400 - validation failed
 
+Every error response, whatever its status, is wrapped in a top-level `error` object:
+
 ```json
 {
-  "success": false,
-  "field_errors": [
-    { "field": "firstName", "messages": ["First name must be at least 2 characters."] }
-  ]
+  "error": {
+    "type": "invalid_request_error",
+    "code": "validation_error",
+    "message": "Validation failed for 2 fields. First name must be at least 2 characters.",
+    "param": "firstName",
+    "field_errors": [
+      { "field": "firstName", "code": "invalid_value", "message": "First name must be at least 2 characters." },
+      { "field": "email", "code": "invalid_value", "message": "Email must be an email." }
+    ]
+  }
 }
 ```
 
-`field_errors` is not guaranteed. A malformed body or an unrecognized property may
-return a different shape. Always fall back to a generic message when you cannot
-read a field error.
+Read `error.field_errors[]`, each with a single `message` string. There is no
+top-level `field_errors` and no `messages` array.
+
+- `field_errors` lists **every** failing property, not only the first one, and an
+  unrecognized property (`"Property bogus should not exist."`) can come first.
+  Show the first error whose `field` is one of the four inputs, and mark that input.
+- `error.message` summarises all of them ("Validation failed for N fields. ...").
+  Use it only when no error names a form field.
+- `field_errors` is absent on non-validation errors. Fall back to `error.message`,
+  then a generic message.
+
+The templates do exactly this in `readError`.
 
 ### Response 429 - rate limited
 

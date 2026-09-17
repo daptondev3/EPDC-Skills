@@ -25,7 +25,7 @@ can do, it says so.
 1. Ask the partner key question (Step 1).
 2. Pick a template (Step 2).
 3. Put that template in the user's project verbatim. Do not retype it from memory.
-4. Change only the two things listed in Step 3.
+4. Change only the things listed in Step 3.
 5. Tell the user the base URL points at dev.
 
 ## Step 1 - Partner key
@@ -82,7 +82,7 @@ Check the rows in order. The first match wins.
 | Situation | Copy |
 | --- | --- |
 | User gave a partner key | `assets/route.ts` **and** `assets/form.tsx` |
-| React or Next.js, no partner key | `assets/form.tsx` |
+| React or Next.js, no partner key | `assets/form.tsx`, with `ENDPOINT` changed (Step 3) |
 | Plain HTML site, no build step | `assets/form.html` |
 | Stack unclear | `assets/form.html` |
 
@@ -96,15 +96,16 @@ How to "copy" depends on your environment:
 - **You cannot write to the user's project**: output the file and tell the user
   the path to save it at.
 
-`assets/form.tsx` posts to your own app by default. Change its `ENDPOINT` constant
-to EPD's URL when there is no route handler. The file says where.
-
 ## Step 3 - What to change
 
-Change only these two things:
+Change only these things:
 
 1. `EPD_API_BASE` - leave the default unless the user named an environment.
-2. Styling - the templates ship unstyled. Match the host page.
+2. `ENDPOINT` in `form.tsx` - **only when you did not copy `route.ts`**. Set it to
+   `` `${EPD_API_BASE}/v1/external-signup` ``. Its default, `/api/epd-signup`, is
+   the route handler in `route.ts`. Without that file every submit fails with a
+   404. When you did copy `route.ts`, leave `ENDPOINT` as it is.
+3. Styling - the templates ship unstyled. Match the host page.
 
 Do not change field names, `minlength`, `maxlength`, the honeypot field, or the
 UTM block. Those match server-side validation and attribution. Changing them
@@ -129,10 +130,8 @@ Each template reads `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, and
 `utm_content` from its own page URL and sends them with the signup. All five are
 treated the same way: sent when the URL carries them, omitted when it does not.
 
-There are no default values. Do not add any. A visitor arriving on a bare link
-creates a signup with no UTM data, which is the honest record. Inventing a source
-would make untracked traffic indistinguishable from a real campaign in EPD's
-reporting.
+There are no default values. Do not add any. When the page URL carries no UTM
+parameters, the form sends none.
 
 Never make these form fields. Never write them back to the URL or browser history.
 
@@ -156,6 +155,7 @@ If you cannot run commands, check these yourself instead:
 - All five `utm_*` params are read, each omitted when the URL has no value, with
   no hardcoded fallbacks
 - The code checks `redirectUrl` exists before navigating to it
+- `form.tsx` without `route.ts`: `ENDPOINT` is EPD's URL, not `/api/epd-signup`
 - No partner key appears in any file that reaches the browser
 - `EPD_API_BASE` is a hardcoded `https://` string, not an env var
 

@@ -4,7 +4,7 @@
  * EPD external signup form - React / Next.js client component.
  *
  * Copy this file as-is. Change only:
- *   1. ENDPOINT (see below)
+ *   1. ENDPOINT, only when you are not also copying route.ts (see below)
  *   2. the styling, to match the host page
  *
  * Do not rename the fields, drop the honeypot, or edit the UTM block.
@@ -22,17 +22,36 @@ const EPD_API_BASE = 'https://api-dev.dev1.epd.com';
  * Default is your own route handler (assets/route.ts), which is required when a
  * partner key is in play and recommended otherwise.
  *
- * No route handler and no partner key? Change this to:
+ * No route handler and no partner key? You must change this to:
  *   const ENDPOINT = `${EPD_API_BASE}/v1/external-signup`;
+ * Left as '/api/epd-signup' with no route handler, every submit 404s.
  */
 const ENDPOINT = '/api/epd-signup';
 
-type FieldError = { field?: string; messages?: string[] };
+type FieldError = { field?: string; code?: string; message?: string };
 type SignupResponse = {
   alreadyRegistered?: boolean;
   redirectUrl?: string;
-  field_errors?: FieldError[];
+  // EPD's error body.
+  error?: { message?: string; field_errors?: FieldError[] };
+  // route.ts's own errors (malformed body, timeout).
+  message?: string;
 };
+
+const FORM_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
+
+// field_errors can lead with a property that is not one of the inputs (an
+// unrecognized key), so prefer the first error on a real form field.
+function readError(data: SignupResponse | null): { message: string; field?: string } {
+  const fieldError = data?.error?.field_errors?.find(
+    (e) => e.field && FORM_FIELDS.includes(e.field) && e.message
+  );
+  if (fieldError?.message) return { message: fieldError.message, field: fieldError.field };
+  return {
+    message:
+      data?.error?.message ?? data?.message ?? 'Please check your details and try again.',
+  };
+}
 
 function text(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -72,8 +91,7 @@ export function EpdSignupForm() {
 
     // UTM attribution. Read-only: never written back to the URL or history,
     // never a form field. Each value is sent only when the page URL carries it.
-    // No defaults: a bare link produces a signup with no UTM data rather than
-    // invented attribution.
+    // No defaults: a param the URL does not carry is not sent.
     const params = new URLSearchParams(window.location.search);
     const utm = (param: string) => (params.get(param) ?? '').trim().slice(0, 100);
     for (const [bodyKey, param] of [
@@ -105,9 +123,12 @@ export function EpdSignupForm() {
       const data = (await res.json().catch(() => null)) as SignupResponse | null;
 
       if (!res.ok) {
-        const fieldError = data?.field_errors?.[0];
-        setError(fieldError?.messages?.[0] ?? 'Please check your details and try again.');
-        setInvalidField(fieldError?.field);
+        const apiError = readError(data);
+        setError(apiError.message);
+        setInvalidField(apiError.field);
+        if (apiError.field) {
+          (form.elements.namedItem(apiError.field) as HTMLInputElement | null)?.focus();
+        }
         setSubmitting(false);
         return;
       }
