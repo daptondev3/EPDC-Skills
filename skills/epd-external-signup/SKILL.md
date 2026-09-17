@@ -122,6 +122,9 @@ Change only these things:
    classes, button, and error element are fine. Keep a submit button inside the
    form: a `<button>` that is not `type="button"`, never a link.
 
+In React, restyle `form.tsx`; do not rebuild it with react-hook-form or the project's
+design-system form components unless the user asks for that.
+
 Do not change field names, `minlength`, `maxlength`, the honeypot field, the
 form's `method="post"`, or the UTM block. Those match server-side validation and
 attribution. Changing them causes 400s or lost attribution.
@@ -162,11 +165,16 @@ It checks field names, validation attributes, the UTM block, error and rate-limi
 handling, and that the partner key is set as a plain string. Fix anything it reports before telling the user you
 are done.
 
-If you cannot run commands, check these yourself instead:
+`verify.mjs` only understands files built from the templates. If the user asked for
+a rebuilt form (react-hook-form, a design-system form), do not change working code
+to satisfy it: go through the list below by hand instead.
+
+If you cannot run commands, or the form was rebuilt, check these yourself instead:
 
 - Inputs are named exactly `firstName`, `lastName`, `companyName`, `email`, and each has a label
 - The honeypot input `name="website"` is still there
-- The request body is built from named fields, never by spreading `FormData`
+- The request body is built from named fields, never by spreading `FormData` or
+  the form library's values, so the honeypot value is never sent
 - All five `utm_*` params are read, each omitted when the URL has no value, with
   no hardcoded fallbacks
 - The code checks `redirectUrl` exists before navigating to it
