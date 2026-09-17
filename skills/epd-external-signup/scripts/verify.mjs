@@ -8,9 +8,42 @@
  * Run this after copying a template, before telling the user you are done.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'companyName', 'email'];
+
+const ROUTE_PATHS = [
+  'app/api/epd-signup/route.ts',
+  'app/api/epd-signup/route.js',
+  'src/app/api/epd-signup/route.ts',
+  'src/app/api/epd-signup/route.js',
+  'pages/api/epd-signup.ts',
+  'pages/api/epd-signup.js',
+  'src/pages/api/epd-signup.ts',
+  'src/pages/api/epd-signup.js',
+];
+
+// A route handler counts if it was passed in alongside the form, or sits at a
+// standard Next.js path in the form's directory or any parent of it.
+function hasRouteHandler(file) {
+  const passedIn = files.some((f) => {
+    try {
+      return /from ['"]next\/server['"]/.test(readFileSync(f, 'utf8'));
+    } catch {
+      return false;
+    }
+  });
+  if (passedIn) return true;
+
+  let dir = dirname(resolve(file));
+  while (true) {
+    if (ROUTE_PATHS.some((p) => existsSync(join(dir, p)))) return true;
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
 
 const checks = [
   {
@@ -103,6 +136,34 @@ const checks = [
         : 'navigating to redirectUrl without checking it exists',
   },
   {
+    // form.tsx ships posting to its own route handler. Copied without route.ts,
+    // every submit 404s.
+    name: 'ENDPOINT has a route handler behind it',
+    applies: (src) => /const ENDPOINT\s*=\s*['"]\/api\/epd-signup['"]/.test(src),
+    run: (src, file) =>
+      hasRouteHandler(file)
+        ? null
+        : "ENDPOINT is '/api/epd-signup' but no route handler was found. Copy assets/route.ts " +
+          'to app/api/epd-signup/route.ts, or set ENDPOINT to `${EPD_API_BASE}/v1/external-signup`',
+  },
+  {
+    // EPD returns { error: { field_errors: [{ field, message }] } }. Reading a
+    // top-level field_errors or messages[0] silently shows only the generic error.
+    name: 'reads EPD error shape',
+    applies: (src) => /!res\.ok/.test(src),
+    run: (src) => {
+      if (/\.messages\??\.?\[0\]/.test(src)) {
+        return 'reads field_errors[].messages[0]; EPD sends a single `message` per field error';
+      }
+      if (/data\s*(\?\.|&&\s*data\.|\.)\s*field_errors/.test(src)) {
+        return 'reads a top-level field_errors; EPD nests it under `error`';
+      }
+      return /field_errors/.test(src)
+        ? null
+        : 'does not read error.field_errors, so visitors never see which field was rejected';
+    },
+  },
+  {
     name: 'no partner key in client-side code',
     applies: (src) => !/from ['"]next\/server['"]/.test(src),
     run: (src) =>
@@ -158,7 +219,7 @@ for (const file of files) {
   const problems = [];
   for (const check of checks) {
     if (!check.applies(src)) continue;
-    const problem = check.run(src);
+    const problem = check.run(src, file);
     if (problem) problems.push(`${check.name}: ${problem}`);
   }
 
