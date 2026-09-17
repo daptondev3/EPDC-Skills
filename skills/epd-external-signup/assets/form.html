@@ -14,7 +14,19 @@
   .epd-field label { display: block; margin-bottom: 0.25rem; }
   .epd-field input { display: block; width: 100%; padding: 0.5rem; }
   .epd-field input[aria-invalid='true'] { border-color: #c00; }
-  .epd-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  /* Shrunk to 1px in place, not pushed off-screen: a left offset scrolls
+     right-to-left pages sideways. */
+  .epd-hp {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .epd-error { color: #c00; min-height: 1.25rem; }
 </style>
 
@@ -134,6 +146,12 @@
       return typeof value === 'string' ? value.trim() : '';
     }
 
+    // True when the honeypot is too small for a person to see or type into.
+    function isHidden(el) {
+      const box = el.getBoundingClientRect();
+      return box.width < 5 && box.height < 5;
+    }
+
     // Sets up every signup form on the page that is not set up yet, so a
     // second copy of this file on the same page still works.
     function setUp(form) {
@@ -178,8 +196,12 @@
 
         const formData = new FormData(form);
 
-        // Honeypot tripped. Act like it worked and send nothing.
-        if (text(formData, 'website')) return;
+        // Honeypot tripped. Act like it worked and send nothing. Only when the
+        // field is really hidden: a page that blocks inline styles shows it, and
+        // a person who fills it in must not be dropped.
+        if (text(formData, 'website') && isHidden(form.elements.namedItem('website').parentElement)) {
+          return;
+        }
 
         if (!form.checkValidity()) {
           form.reportValidity();

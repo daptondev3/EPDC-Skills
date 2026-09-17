@@ -76,6 +76,27 @@ function text(formData: FormData, key: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// True when the honeypot is too small for a person to see or type into.
+function isHidden(el: Element | null | undefined): boolean {
+  if (!el) return true;
+  const box = el.getBoundingClientRect();
+  return box.width < 5 && box.height < 5;
+}
+
+// Shrunk to 1px in place, not pushed off-screen: a left offset scrolls
+// right-to-left pages sideways.
+const honeypotStyle: React.CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: -1,
+  padding: 0,
+  border: 0,
+  overflow: 'hidden',
+  clipPath: 'inset(50%)',
+  whiteSpace: 'nowrap',
+};
+
 export function EpdSignupForm() {
   const [error, setError] = useState('');
   const [invalidField, setInvalidField] = useState<string | undefined>();
@@ -107,8 +128,11 @@ export function EpdSignupForm() {
 
     const formData = new FormData(form);
 
-    // Honeypot tripped. Act like it worked and send nothing.
-    if (text(formData, 'website')) return;
+    // Honeypot tripped. Act like it worked and send nothing. Only when the field
+    // is really hidden: a page that blocks inline styles shows it, and a person
+    // who fills it in must not be dropped.
+    const honeypot = form.elements.namedItem('website') as HTMLInputElement | null;
+    if (text(formData, 'website') && isHidden(honeypot?.parentElement)) return;
 
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -249,7 +273,7 @@ export function EpdSignupForm() {
       </div>
 
       {/* Honeypot. Hidden from people, filled by bots. Do not remove. */}
-      <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px' }}>
+      <div aria-hidden="true" style={honeypotStyle}>
         <label htmlFor="epd-website">Website</label>
         <input id="epd-website" name="website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
