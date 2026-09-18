@@ -281,7 +281,7 @@ export function EpdSignupForm() {
       </div>
 
       <div>
-        <label htmlFor={`${id}-email`}>Work email</label>
+        <label htmlFor={`${id}-email`}>Email</label>
         <input
           id={`${id}-email`}
           name="email"
